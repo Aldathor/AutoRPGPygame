@@ -1,12 +1,12 @@
 """
-Battle Manager - Controls combat flow and calculations
+Updates to the Battle Manager to support party battles
 """
 from game.config import BATTLE_TIMER_INTERVAL
 from ui.combat_log import CombatLog
 
 class BattleManager:
     """
-    Manages battles between characters and enemies
+    Manages battles between party members and enemies
     """
     def __init__(self, game_state):
         """
@@ -18,6 +18,12 @@ class BattleManager:
         self.game_state = game_state
         self.combat_log = CombatLog()
         self.last_action_time = 0
+        self.target_selection = {
+            "active": False,
+            "source_character": None,
+            "potential_targets": [],
+            "callback": None
+        }
     
     def update(self, delta_time):
         """
@@ -27,8 +33,9 @@ class BattleManager:
             delta_time (float): Time since last update in seconds
         """
         # Update all combat entities
-        if self.game_state.player_character:
-            self.game_state.player_character.update(delta_time)
+        for character in self.game_state.party:
+            if character and character.is_alive():
+                character.update(delta_time)
         
         for enemy in self.game_state.enemies:
             if enemy.is_alive():
@@ -38,59 +45,179 @@ class BattleManager:
         self.game_state.enemies = [enemy for enemy in self.game_state.enemies if enemy.is_alive()]
         
         # Process battle actions based on timer
-        self.last_action_time += delta_time
-        if self.last_action_time >= BATTLE_TIMER_INTERVAL:
-            self.last_action_time = 0
-            self._process_battle_actions()
+        if not self.target_selection["active"]:  # Don't process actions during target selection
+            self.last_action_time += delta_time
+            if self.last_action_time >= BATTLE_TIMER_INTERVAL:
+                self.last_action_time = 0
+                self._process_battle_actions()
     
     def _process_battle_actions(self):
         """Process one round of battle actions"""
-        player = self.game_state.player_character
-        
-        # Skip if player is dead or no enemies
-        if not player or not player.is_alive() or not self.game_state.enemies:
+        # Skip if no party members are alive or no enemies
+        if not self._is_party_alive() or not self.game_state.enemies:
             return
         
-        # Process player action
-        if player.can_attack():
-            # Select first living enemy
-            target = next((enemy for enemy in self.game_state.enemies if enemy.is_alive()), None)
-            if target:
-                result = player.attack_target(target)
-                self._log_attack(player, target, result)
-                
-                # Check if enemy died
-                if not target.is_alive():
-                    self._handle_enemy_defeat(target)
+        # Process party member actions
+        for character in self.game_state.party:
+            if character and character.is_alive() and character.can_attack():
+                # Auto-select target based on character's role/strategy
+                target = self._select_target_for_character(character)
+                if target:
+                    result = character.attack_target(target)
+                    self._log_attack(character, target, result)
+                    
+                    # Check if enemy died
+                    if not target.is_alive():
+                        self._handle_enemy_defeat(target, character)
         
         # Process enemy actions
         for enemy in self.game_state.enemies:
             if enemy.is_alive() and enemy.can_attack():
-                result = enemy.attack_target(player)
-                self._log_attack(enemy, player, result)
-                
-                # Check if player died
-                if not player.is_alive():
-                    self._log_message(f"{player.name} has been defeated!")
-                    break
+                # Select target from party
+                target = self._select_target_for_enemy(enemy)
+                if target:
+                    result = enemy.attack_target(target)
+                    self._log_attack(enemy, target, result)
+                    
+                    # Check if character died
+                    if not target.is_alive():
+                        self._log_message(f"{target.name} has been defeated!")
+                        
+                        # Check if all party members are dead
+                        if not self._is_party_alive():
+                            self._log_message("The party has been defeated!")
+                            break
     
-    def _handle_enemy_defeat(self, enemy):
+    def _is_party_alive(self):
+        """Check if any party member is alive"""
+        return any(char and char.is_alive() for char in self.game_state.party)
+    
+    def _select_target_for_character(self, character):
+        """
+        Select a target for a character to attack
+        
+        Args:
+            character (BaseCharacter): The character selecting a target
+            
+        Returns:
+            Enemy: The selected target
+        """
+        # For now, simply select the first living enemy
+        # This will be replaced with more sophisticated targeting logic
+        for enemy in self.game_state.enemies:
+            if enemy.is_alive():
+                return enemy
+        return None
+    
+    def _select_target_for_enemy(self, enemy):
+        """
+        Select a target for an enemy to attack
+        
+        Args:
+            enemy (Enemy): The enemy selecting a target
+            
+        Returns:
+            BaseCharacter: The selected target
+        """
+        # Basic targeting strategy based on enemy type
+        # Can be expanded with more sophisticated enemy AI
+        living_party = [char for char in self.game_state.party if char and char.is_alive()]
+        
+        if not living_party:
+            return None
+            
+        # Different enemy types might have different targeting strategies
+        if enemy.enemy_type == "goblin":
+            # Goblins prefer to attack the weakest target
+            return min(living_party, key=lambda char: char.current_hp)
+        elif enemy.enemy_type == "orc":
+            # Orcs prefer to attack the strongest target
+            return max(living_party, key=lambda char: char.attack)
+        elif enemy.enemy_type == "dragon":
+            # Dragons prefer to attack the character with highest magic (most threat)
+            return max(living_party, key=lambda char: char.magic)
+        else:
+            # Default: random target
+            import random
+            return random.choice(living_party)
+    
+    def initiate_target_selection(self, source_character, potential_targets, callback):
+        """
+        Start the target selection process
+        
+        Args:
+            source_character (BaseCharacter): Character selecting a target
+            potential_targets (list): List of potential targets
+            callback (function): Function to call with selected target
+        """
+        self.target_selection = {
+            "active": True,
+            "source_character": source_character,
+            "potential_targets": potential_targets,
+            "callback": callback
+        }
+    
+    def select_target(self, target_index):
+        """
+        Complete target selection
+        
+        Args:
+            target_index (int): Index of selected target
+        """
+        if not self.target_selection["active"]:
+            return
+            
+        if 0 <= target_index < len(self.target_selection["potential_targets"]):
+            target = self.target_selection["potential_targets"][target_index]
+            self.target_selection["callback"](target)
+            
+        # Reset target selection state
+        self.target_selection = {
+            "active": False,
+            "source_character": None,
+            "potential_targets": [],
+            "callback": None
+        }
+    
+    def _handle_enemy_defeat(self, enemy, character):
         """
         Handle effects of defeating an enemy
         
         Args:
             enemy (Enemy): The defeated enemy
+            character (BaseCharacter): Character that defeated the enemy
         """
-        player = self.game_state.player_character
-        
-        # Award XP
+        # Award XP to all living party members
+        # The character that dealt the killing blow gets a bonus
         xp_gained = enemy.get_xp_value()
-        leveled_up = player.gain_xp(xp_gained)
         
-        # Log results
-        self._log_message(f"{enemy.name} has been defeated! +{xp_gained} XP")
-        if leveled_up:
-            self._log_message(f"{player.name} leveled up to level {player.level}!")
+        # Calculate shared XP (70% of total, divided among all living party members)
+        living_party_count = sum(1 for char in self.game_state.party if char and char.is_alive())
+        shared_xp = int(xp_gained * 0.7 / living_party_count) if living_party_count > 0 else 0
+        
+        # Killer gets bonus XP (30% of total)
+        killer_bonus = int(xp_gained * 0.3)
+        
+        # Award XP to all living party members
+        for char in self.game_state.party:
+            if char and char.is_alive():
+                # Award shared XP
+                char_xp = shared_xp
+                
+                # Add bonus for the killer
+                if char == character:
+                    char_xp += killer_bonus
+                
+                # Apply XP gain
+                leveled_up = char.gain_xp(char_xp)
+                
+                # Log results
+                self._log_message(f"{char.name} gained {char_xp} XP")
+                if leveled_up:
+                    self._log_message(f"{char.name} leveled up to level {char.level}!")
+        
+        # Log the defeat
+        self._log_message(f"{enemy.name} has been defeated!")
     
     def _log_attack(self, attacker, target, result):
         """

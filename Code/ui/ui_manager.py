@@ -1,15 +1,17 @@
 """
-UI Manager - Handles all UI rendering
+UI Manager - Handles all UI rendering for party-based system
 """
 import pygame
 from game.config import (
     SCREEN_WIDTH, SCREEN_HEIGHT, UI_FONT, UI_FONT_SIZE, UI_PADDING,
     HEALTH_BAR_HEIGHT, XP_BAR_HEIGHT, COMBAT_LOG_LINES, COMBAT_LOG_WIDTH,
-    COMBAT_LOG_HEIGHT, STATE_MENU, STATE_CHARACTER_SELECT, STATE_BATTLE, 
-    STATE_GAME_OVER, STATE_VICTORY
+    COMBAT_LOG_HEIGHT, STATE_MENU, STATE_CHARACTER_SELECT, STATE_PARTY_SELECT, 
+    STATE_BATTLE, STATE_GAME_OVER, STATE_VICTORY,
+    MAX_PARTY_SIZE
 )
 from .combat_log import CombatLog
 from .status_bars import HealthBar, XPBar, CooldownIndicator
+from .party_ui import PartySelectionUI, PartyBattleUI
 
 class UIManager:
     """
@@ -35,6 +37,10 @@ class UIManager:
         self.xp_bar = XPBar()
         self.cooldown_indicator = CooldownIndicator()
         
+        # Party UI components
+        self.party_selection_ui = PartySelectionUI(game_state)
+        self.party_battle_ui = PartyBattleUI(game_state)
+        
         # Colors
         self.colors = {
             "text": (255, 255, 255),
@@ -44,8 +50,15 @@ class UIManager:
             "button_text": (255, 255, 255),
             "warrior": (200, 0, 0),
             "archer": (0, 200, 0),
-            "mage": (0, 0, 200)
+            "mage": (0, 0, 200),
+            "character_slot": (50, 50, 50),
+            "selected_slot": (100, 100, 150)
         }
+        
+        # UI state variables
+        self.button_states = {}  # For hover effects
+        self.tooltip_text = ""
+        self.tooltip_timer = 0
     
     def update(self, delta_time):
         """
@@ -54,8 +67,18 @@ class UIManager:
         Args:
             delta_time (float): Time since last update in seconds
         """
-        # UI updates if needed
-        pass
+        # Update tooltip timer
+        if self.tooltip_text:
+            self.tooltip_timer += delta_time
+            if self.tooltip_timer > 5.0:  # Hide tooltip after 5 seconds
+                self.tooltip_text = ""
+                self.tooltip_timer = 0
+                
+        # Update party UI components
+        if self.game_state.current_state == STATE_PARTY_SELECT:
+            self.party_selection_ui.update(delta_time)
+        elif self.game_state.current_state == STATE_BATTLE:
+            self.party_battle_ui.update(delta_time)
     
     def render(self, screen):
         """
@@ -72,12 +95,18 @@ class UIManager:
             self._render_menu(screen)
         elif self.game_state.current_state == STATE_CHARACTER_SELECT:
             self._render_character_select(screen)
+        elif self.game_state.current_state == STATE_PARTY_SELECT:
+            self._render_party_select(screen)
         elif self.game_state.current_state == STATE_BATTLE:
             self._render_battle(screen)
         elif self.game_state.current_state == STATE_GAME_OVER:
             self._render_game_over(screen)
         elif self.game_state.current_state == STATE_VICTORY:
             self._render_victory(screen)
+            
+        # Always render tooltip if present
+        if self.tooltip_text:
+            self._render_tooltip(screen)
     
     def _render_menu(self, screen):
         """
@@ -93,7 +122,8 @@ class UIManager:
         
         # Instructions
         instructions = [
-            "Press ENTER to start a new game",
+            "Press N to start a new game",
+            "Press C to manage characters",
             "Press L to load a saved game",
             "Press ESC to exit"
         ]
@@ -122,7 +152,7 @@ class UIManager:
             screen (pygame.Surface): The screen to render to
         """
         # Title
-        title_text = self.title_font.render("Select Your Class", True, self.colors["text"])
+        title_text = self.title_font.render("Create New Character", True, self.colors["text"])
         title_rect = title_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 6))
         screen.blit(title_text, title_rect)
         
@@ -185,10 +215,24 @@ class UIManager:
                 text = self.font.render(line, True, self.colors["text"])
                 screen.blit(text, (x + 10, y_text))
         
+        # Character name input
+        name_prompt = self.font.render("Enter character name:", True, self.colors["text"])
+        screen.blit(name_prompt, (SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT * 3 // 4))
+        
         # Instructions
         instruction_text = self.font.render("ESC to return to menu", True, self.colors["text"])
         instruction_rect = instruction_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 50))
         screen.blit(instruction_text, instruction_rect)
+    
+    def _render_party_select(self, screen):
+        """
+        Render the party selection screen
+        
+        Args:
+            screen (pygame.Surface): The screen to render to
+        """
+        # Use the specialized party selection UI component
+        self.party_selection_ui.render(screen, self.font, self.title_font, self.colors)
     
     def _render_battle(self, screen):
         """
@@ -197,24 +241,8 @@ class UIManager:
         Args:
             screen (pygame.Surface): The screen to render to
         """
-        player = self.game_state.player_character
-        if not player:
-            return
-        
-        # Render player character
-        player_x = SCREEN_WIDTH // 4
-        player_y = SCREEN_HEIGHT // 2
-        player.render(screen, (player_x - player.sprite.get_width() // 2, 
-                              player_y - player.sprite.get_height() // 2))
-        
-        # Render player health bar
-        self._render_health_bar(screen, player, player_x, player_y + 50)
-        
-        # Render player XP bar
-        self._render_xp_bar(screen, player, player_x, player_y + 50 + HEALTH_BAR_HEIGHT + 5)
-        
-        # Render player stats
-        self._render_character_stats(screen, player, player_x - 100, player_y + 100)
+        # Use party battle UI to render party members
+        self.party_battle_ui.render(screen, self.font, self.health_bar, self.xp_bar)
         
         # Render enemies
         enemy_x = (SCREEN_WIDTH * 3) // 4
@@ -246,6 +274,18 @@ class UIManager:
                 name_text = self.font.render(f"{enemy.name} (Lv.{enemy.level})", True, self.colors["text"])
                 name_rect = name_text.get_rect(center=(enemy_pos_x, enemy_pos_y - 30))
                 screen.blit(name_text, name_rect)
+                
+                # Highlight target if in target selection mode
+                if self.game_state.selecting_target and enemy in self.game_state.potential_targets:
+                    pygame.draw.rect(
+                        screen,
+                        (255, 255, 0),
+                        (enemy_pos_x - enemy.sprite.get_width() // 2 - 5,
+                         enemy_pos_y - enemy.sprite.get_height() // 2 - 5,
+                         enemy.sprite.get_width() + 10,
+                         enemy.sprite.get_height() + 10),
+                        2  # Border width
+                    )
         
         # Render combat log
         self._render_combat_log(screen)
@@ -258,6 +298,13 @@ class UIManager:
         
         status_rect = status_text.get_rect(center=(SCREEN_WIDTH // 2, 30))
         screen.blit(status_text, status_rect)
+        
+        # If in target selection mode, display prompt
+        if self.game_state.selecting_target:
+            prompt_text = self.font.render("Select a target (1-" + str(len(self.game_state.potential_targets)) + 
+                                          "), ESC to cancel", True, (255, 255, 0))
+            prompt_rect = prompt_text.get_rect(center=(SCREEN_WIDTH // 2, 60))
+            screen.blit(prompt_text, prompt_rect)
     
     def _render_game_over(self, screen):
         """
@@ -272,14 +319,12 @@ class UIManager:
         screen.blit(title_text, title_rect)
         
         # Stats
-        player = self.game_state.player_character
-        if player:
-            stats_text = self.font.render(
-                f"Your {player.name} (Level {player.level}) has been defeated!",
-                True, self.colors["text"]
-            )
-            stats_rect = stats_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
-            screen.blit(stats_text, stats_rect)
+        party_text = self.font.render(
+            f"Your party has been defeated!",
+            True, self.colors["text"]
+        )
+        party_rect = party_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+        screen.blit(party_text, party_rect)
         
         # Instructions
         instruction_text = self.font.render("Press ENTER to return to menu", True, self.colors["text"])
@@ -298,15 +343,22 @@ class UIManager:
         title_rect = title_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 3))
         screen.blit(title_text, title_rect)
         
-        # Stats
-        player = self.game_state.player_character
-        if player:
-            stats_text = self.font.render(
-                f"Your {player.name} (Level {player.level}) was victorious!",
-                True, self.colors["text"]
-            )
-            stats_rect = stats_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
-            screen.blit(stats_text, stats_rect)
+        # Party display
+        party_text = self.font.render("Your party was victorious!", True, self.colors["text"])
+        party_rect = party_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+        screen.blit(party_text, party_rect)
+        
+        # Display party members
+        y_offset = SCREEN_HEIGHT // 2 + 40
+        for i, character in enumerate(self.game_state.party):
+            if character:
+                char_text = self.font.render(
+                    f"{character.name} (Lv.{character.level})", 
+                    True, self.colors["text"]
+                )
+                char_rect = char_text.get_rect(center=(SCREEN_WIDTH // 2, y_offset))
+                screen.blit(char_text, char_rect)
+                y_offset += 30
         
         # Auto-continue message or pause notification
         if self.game_state.battle_paused:
@@ -387,3 +439,45 @@ class UIManager:
         log_x = SCREEN_WIDTH - COMBAT_LOG_WIDTH - UI_PADDING
         log_y = SCREEN_HEIGHT - COMBAT_LOG_HEIGHT - UI_PADDING
         self.combat_log.render(screen, self.font, log_x, log_y)
+    
+    def _render_tooltip(self, screen):
+        """
+        Render a tooltip with the current tooltip text
+        
+        Args:
+            screen (pygame.Surface): The screen to render to
+        """
+        # Get mouse position for tooltip positioning
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+        
+        # Render tooltip text
+        tooltip_surface = self.font.render(self.tooltip_text, True, (255, 255, 255))
+        tooltip_rect = tooltip_surface.get_rect()
+        
+        # Position tooltip near mouse but ensure it stays on screen
+        tooltip_x = mouse_x + 15
+        tooltip_y = mouse_y + 15
+        
+        # Adjust if tooltip would go off screen
+        if tooltip_x + tooltip_rect.width > SCREEN_WIDTH:
+            tooltip_x = SCREEN_WIDTH - tooltip_rect.width - 5
+        if tooltip_y + tooltip_rect.height > SCREEN_HEIGHT:
+            tooltip_y = SCREEN_HEIGHT - tooltip_rect.height - 5
+        
+        # Draw background with alpha
+        bg_surface = pygame.Surface((tooltip_rect.width + 10, tooltip_rect.height + 10), pygame.SRCALPHA)
+        bg_surface.fill((0, 0, 0, 200))  # Black with alpha
+        screen.blit(bg_surface, (tooltip_x - 5, tooltip_y - 5))
+        
+        # Draw text
+        screen.blit(tooltip_surface, (tooltip_x, tooltip_y))
+    
+    def set_tooltip(self, text):
+        """
+        Set the current tooltip text
+        
+        Args:
+            text (str): Text to display in tooltip
+        """
+        self.tooltip_text = text
+        self.tooltip_timer = 0  # Reset timer when setting new tooltip

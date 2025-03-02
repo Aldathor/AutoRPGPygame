@@ -1,6 +1,6 @@
 # enemy_base.py
 """
-Base enemy class
+Base enemy class with party-system targeting support
 """
 import random
 import pygame
@@ -23,10 +23,43 @@ class Enemy(BaseCharacter):
         super().__init__(name, level)
         self.enemy_type = enemy_type
         self.xp_value = int(XP_GAIN_BASE * level)
+        self.targeting_priority = "random"  # Default targeting priority
         
         # Create placeholder sprite
         self.sprite = pygame.Surface((32, 48))
         self.sprite.fill((150, 150, 150))  # Gray for generic enemy
+    
+    def select_target(self, party):
+        """
+        Select a target from the party based on targeting priority
+        
+        Args:
+            party (list): List of party members
+            
+        Returns:
+            BaseCharacter: Selected target or None if no valid targets
+        """
+        # Filter to only living party members
+        living_party = [char for char in party if char and char.is_alive()]
+        
+        if not living_party:
+            return None
+            
+        # Select target based on priority
+        if self.targeting_priority == "random":
+            return random.choice(living_party)
+        elif self.targeting_priority == "weakest":
+            # Target character with lowest HP percentage
+            return min(living_party, key=lambda char: char.current_hp / char.max_hp)
+        elif self.targeting_priority == "strongest":
+            # Target character with highest attack
+            return max(living_party, key=lambda char: char.attack)
+        elif self.targeting_priority == "magical":
+            # Target character with highest magic
+            return max(living_party, key=lambda char: char.magic)
+        else:
+            # Default to random if unknown priority
+            return random.choice(living_party)
     
     def attack_target(self, target):
         """

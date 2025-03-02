@@ -1,0 +1,60 @@
+{
+  "party": [
+    {
+      "name": "felipe",
+      "class": "Warrior",
+      "level": 1,
+      "max_hp": 150,
+      "current_hp": 0,
+      "attack": 12,
+      "defense": 6,
+      "magic": 8,
+      "speed": 4,
+      "xp": 84,
+      "xp_to_next_level": 282,
+      "base_hp": 150,
+      "base_attack": 12,
+      "base_defense": 6,
+      "base_magic": 8,
+      "base_speed": 4
+    },
+    {
+      "name": "a",
+      "class": "Warrior",
+      "level": 1,
+      "max_hp": 150,
+      "current_hp": 84,
+      "attack": 12,
+      "defense": 6,
+      "magic": 8,
+      "speed": 4,
+      "xp": 23,
+      "xp_to_next_level": 282,
+      "base_hp": 150,
+      "base_attack": 12,
+      "base_defense": 6,
+      "base_magic": 8,
+      "base_speed": 4
+    },
+    {
+      "name": "Xin Li",
+      "class": "Archer",
+      "level": 1,
+      "max_hp": 90,
+      "current_hp": 0,
+      "attack": 14,
+      "defense": 4,
+      "magic": 9,
+      "speed": 7,
+      "xp": 28,
+      "xp_to_next_level": 282,
+      "base_hp": 90,
+      "base_attack": 14,
+      "base_defense": 4,
+      "base_magic": 9,
+      "base_speed": 7
+    }
+  ],
+  "victory_count": 1,
+  "defeat_count": 0
+}
