@@ -27,8 +27,13 @@ auto_RPG_Pygame/
 │   └── enemy_spawner.py    # Generates enemies
 ├── ui/
 │   ├── __init__.py
-│   ├── ui_manager.py       # Manages UI elements
-│   ├── combat_log.py       # Combat event display
+│   ├── ui_manager.py  *     # Manages UI elements
+│   ├── party_ui.py
+│   ├── animation_helper.py
+│   ├── animation.py
+│   ├── ascii_sprites.py
+│   ├── rest_animation.py
+│   ├── ascii_background.py
 │   ├── status_bars.py      # HP/XP bars
 │   ├── combat_log.py       # combat log for fights
 │   └── character_creation.py # Dialog for creating new characters
