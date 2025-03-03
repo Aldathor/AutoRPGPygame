@@ -34,9 +34,9 @@ class Warrior(BaseCharacter):
         # Special warrior properties
         self.critical_hit_chance = CRITICAL_HIT_CHANCE * 1.5  # 50% higher crit chance
         
-        # Create a simple placeholder sprite (will be replaced with actual sprite)
-        self.sprite = pygame.Surface((32, 48))
-        self.sprite.fill((200, 0, 0))  # Red for warrior
+        # Replace colored square with ASCII sprite
+        from ui.ascii_sprites import get_class_sprite
+        self.sprite = get_class_sprite("warrior", (200, 0, 0)).surface
     
     def attack_target(self, target):
         """
@@ -103,3 +103,7 @@ class Warrior(BaseCharacter):
             self.alive = False
         
         return {"damage": actual_damage, "hit": True}
+
+    def get_animation_type(self):
+        """Get the animation type for warriors"""
+        return "slash"

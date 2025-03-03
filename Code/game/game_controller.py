@@ -55,6 +55,8 @@ class GameController:
         # Combat and rest counter
         self.combat_encounter_count = 0
         self.rests_taken = 0
+        # Add this to the game state so UI can access it
+        self.game_state.rests_taken = 0
 
         # Attach battle manager to game state for UI access
         self.game_state.battle_manager = self.battle_manager
@@ -144,6 +146,10 @@ class GameController:
         elif key == pygame.K_SPACE and self.game_state.current_state in [STATE_BATTLE, STATE_VICTORY]:
             # Global pause/resume (works in battle and victory states)
             paused = self.game_state.toggle_battle_pause()
+            if paused:
+                self.animation_helper.pause_animations()
+            else:
+                self.animation_helper.resume_animations()
             print(f"Game {'paused' if paused else 'resumed'}")
             return True
         
@@ -750,27 +756,116 @@ class GameController:
     
     def _take_rest(self):
         """
-        Take a rest to restore party's health
+        Take a rest to restore party's health and revive fallen characters
         """
-        # Heal all party members to full
+        # Create fire pit animation
+        from ui.rest_animation import FirePitAnimation
+        fire_pit = FirePitAnimation(self.screen.get_width(), self.screen.get_height())
+        
+        # Set up animation variables
+        animation_duration = 5.0  # seconds
+        animation_timer = 0
+        clock = pygame.time.Clock()
+        
+        # Show animation
+        while animation_timer < animation_duration:
+            delta_time = clock.tick(60) / 1000.0  # delta time in seconds
+            animation_timer += delta_time
+            
+            # Update animation
+            fire_pit.update(delta_time)
+            
+            # Render animation
+            self.screen.fill((0, 0, 0))  # Clear screen
+            fire_pit.render(self.screen)
+            
+            # Render rest information
+            font = pygame.font.SysFont("Arial", 24)
+            rest_text = font.render(f"Resting by the campfire... ({self.rests_taken + 1})", True, (255, 255, 255))
+            rest_rect = rest_text.get_rect(center=(self.screen.get_width() // 2, 50))
+            self.screen.blit(rest_text, rest_rect)
+            
+            # Render party recovery info
+            y_offset = 100
+            for character in self.game_state.party:
+                if character:
+                    # Gradual healing animation
+                    heal_percentage = min(1.0, animation_timer / animation_duration)
+                    if not character.is_alive():
+                        status = "Reviving..."
+                        new_hp = int(character.max_hp * heal_percentage)
+                    else:
+                        old_hp = character.current_hp
+                        new_hp = old_hp + int((character.max_hp - old_hp) * heal_percentage)
+                        status = "Recovering..."
+                    
+                    # Update character HP for animation effect
+                    character.current_hp = new_hp
+                    if heal_percentage > 0.5:  # Halfway through, revive any dead characters
+                        character.alive = True
+                    
+                    char_text = font.render(f"{character.name}: {status} ({character.current_hp}/{character.max_hp} HP)", True, (255, 255, 255))
+                    char_rect = char_text.get_rect(center=(self.screen.get_width() // 2, y_offset))
+                    self.screen.blit(char_text, char_rect)
+                    y_offset += 30
+            
+            # Render a progress bar
+            bar_width = 400
+            bar_height = 20
+            bar_x = (self.screen.get_width() - bar_width) // 2
+            bar_y = self.screen.get_height() - 100
+            
+            # Background
+            pygame.draw.rect(screen, (50, 50, 50), (bar_x, bar_y, bar_width, bar_height))
+            # Progress
+            progress_width = int(bar_width * (animation_timer / animation_duration))
+            pygame.draw.rect(screen, (0, 200, 0), (bar_x, bar_y, progress_width, bar_height))
+            # Border
+            pygame.draw.rect(screen, (200, 200, 200), (bar_x, bar_y, bar_width, bar_height), 2)
+            
+            # Render continue message
+            if animation_timer > animation_duration * 0.8:  # Near the end
+                continue_text = font.render("Press any key to continue...", True, (255, 255, 255))
+                continue_rect = continue_text.get_rect(center=(self.screen.get_width() // 2, self.screen.get_height() - 50))
+                screen.blit(continue_text, continue_rect)
+            
+            pygame.display.flip()
+            
+            # Handle events
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    import sys
+                    sys.exit()
+                elif event.type == pygame.KEYDOWN and animation_timer > animation_duration * 0.8:
+                    # Allow skipping near the end
+                    animation_timer = animation_duration
+                elif event.type == pygame.MOUSEBUTTONDOWN and animation_timer > animation_duration * 0.8:
+                    # Allow skipping near the end
+                    animation_timer = animation_duration
+        
+        # Heal all party members to full and revive fallen characters
         for character in self.game_state.party:
             if character:
                 old_hp = character.current_hp
                 character.current_hp = character.max_hp
+                character.alive = True  # Revive
                 heal_amount = character.current_hp - old_hp
                 
                 if self.debug and heal_amount > 0:
                     print(f"{character.name} rested and recovered {heal_amount} HP")
         
         self.rests_taken += 1
+        self.game_state.rests_taken = self.rests_taken  # Update in game state for UI
         
         if self.debug:
             print(f"Party has taken a rest ({self.rests_taken} rests so far)")
         
-        # Add a message to the combat log if it exists
+        # Add a message to the combat log
         if hasattr(self.battle_manager, 'combat_log'):
             self.battle_manager._log_message("The party takes a rest and recovers full health!")
-        
+            self.battle_manager._log_message("All fallen characters have been revived!")
+            
         # Continue to next battle after the rest
         # Reset battle state but keep the party
         self.game_state.enemies = []

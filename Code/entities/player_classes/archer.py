@@ -35,9 +35,9 @@ class Archer(BaseCharacter):
         self.dodge_chance = DODGE_CHANCE_BASE + (self.speed * DODGE_CHANCE_PER_SPEED)
         self.multi_hit_chance = 0.3  # 30% chance to hit multiple times
         
-        # Create a simple placeholder sprite
-        self.sprite = pygame.Surface((32, 48))
-        self.sprite.fill((0, 200, 0))  # Green for archer
+        # Replace colored square with ASCII sprite
+        from ui.ascii_sprites import get_class_sprite
+        self.sprite = get_class_sprite("archer", (0, 200, 0)).surface
     
     def attack_target(self, target):
         """
@@ -121,3 +121,7 @@ class Archer(BaseCharacter):
             self.alive = False
         
         return {"damage": actual_damage, "hit": True, "dodged": False}
+
+    def get_animation_type(self):
+        """Get the animation type for archers"""
+        return "arrow"

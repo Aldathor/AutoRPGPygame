@@ -38,9 +38,9 @@ class Mage(BaseCharacter):
             "lightning": {"chance": 0.1, "damage_multiplier": 1.5}
         }
         
-        # Create a simple placeholder sprite
-        self.sprite = pygame.Surface((32, 48))
-        self.sprite.fill((0, 0, 200))  # Blue for mage
+        # Replace colored square with ASCII sprite
+        from ui.ascii_sprites import get_class_sprite
+        self.sprite = get_class_sprite("mage", (0, 0, 200)).surface
     
     def attack_target(self, target):
         """
@@ -125,3 +125,7 @@ class Mage(BaseCharacter):
             self.alive = False
         
         return {"damage": actual_damage, "hit": True}
+
+    def get_animation_type(self):
+        """Get the animation type for mages"""
+        return "spell"

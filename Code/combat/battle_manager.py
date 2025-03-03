@@ -24,6 +24,9 @@ class BattleManager:
             "potential_targets": [],
             "callback": None
         }
+        
+        # Add animation list
+        self.animations = []
     
     def update(self, delta_time):
         """
@@ -41,11 +44,14 @@ class BattleManager:
             if enemy.is_alive():
                 enemy.update(delta_time)
         
+        # Update animations
+        self.animations = [anim for anim in self.animations if anim.update()]
+        
         # Remove dead enemies
         self.game_state.enemies = [enemy for enemy in self.game_state.enemies if enemy.is_alive()]
         
-        # Process battle actions based on timer
-        if not self.target_selection["active"]:  # Don't process actions during target selection
+        # Process battle actions based on timer if no animations are playing
+        if not self.target_selection["active"] and not self.animations:  # Don't process during animations
             self.last_action_time += delta_time
             if self.last_action_time >= BATTLE_TIMER_INTERVAL:
                 self.last_action_time = 0
@@ -57,6 +63,10 @@ class BattleManager:
         if not self._is_party_alive() or not self.game_state.enemies:
             return
         
+        # Skip if animations are currently playing
+        if hasattr(self.game_state, 'animation_helper') and self.game_state.animation_helper.attack_animations:
+            return
+        
         # Process party member actions
         for character in self.game_state.party:
             if character and character.is_alive() and character.can_attack():
@@ -66,9 +76,17 @@ class BattleManager:
                     result = character.attack_target(target)
                     self._log_attack(character, target, result)
                     
+                    # Add attack animation if we have an animation helper
+                    if hasattr(self.game_state, 'animation_helper'):
+                        anim_type = character.get_animation_type()
+                        self.game_state.animation_helper.add_attack_animation(character, target, anim_type)
+                    
                     # Check if enemy died
                     if not target.is_alive():
                         self._handle_enemy_defeat(target, character)
+                    
+                    # Only process one character attack at a time
+                    return
         
         # Process enemy actions
         for enemy in self.game_state.enemies:
@@ -79,6 +97,11 @@ class BattleManager:
                     result = enemy.attack_target(target)
                     self._log_attack(enemy, target, result)
                     
+                    # Add attack animation if we have an animation helper
+                    if hasattr(self.game_state, 'animation_helper'):
+                        anim_type = enemy.get_animation_type()
+                        self.game_state.animation_helper.add_attack_animation(enemy, target, anim_type)
+                    
                     # Check if character died
                     if not target.is_alive():
                         self._log_message(f"{target.name} has been defeated!")
@@ -87,6 +110,9 @@ class BattleManager:
                         if not self._is_party_alive():
                             self._log_message("The party has been defeated!")
                             break
+                    
+                    # Only process one enemy attack at a time
+                    return
     
     def _is_party_alive(self):
         """Check if any party member is alive"""
@@ -252,3 +278,44 @@ class BattleManager:
             list: Recent combat log messages
         """
         return self.combat_log.get_recent_entries(count)
+    
+    def add_attack_animation(self, attacker, target, animation_type="slash"):
+        """
+        Add an attack animation
+        
+        Args:
+            attacker (BaseCharacter): The attacking character
+            target (BaseCharacter): The target character
+            animation_type (str): Type of animation
+        """
+        # Determine animation type based on character class or enemy type
+        if hasattr(attacker, 'enemy_type'):
+            if attacker.enemy_type == "dragon":
+                animation_type = "spell"  # Dragon uses spell animation
+            else:
+                animation_type = "slash"  # Other enemies use slash
+        else:
+            # Player character - determine by class
+            class_name = attacker.__class__.__name__.lower()
+            if class_name == "warrior":
+                animation_type = "slash"
+            elif class_name == "archer":
+                animation_type = "arrow"
+            elif class_name == "mage":
+                animation_type = "spell"
+        
+        # Create and add animation
+        from ui.animation import AttackAnimation
+        animation = AttackAnimation(attacker, target, animation_type)
+        animation.start()
+        self.animations.append(animation)
+
+    def render_animations(self, screen):
+        """
+        Render all active animations
+        
+        Args:
+            screen (pygame.Surface): The screen to render to
+        """
+        for animation in self.animations:
+            animation.render(screen)

@@ -100,8 +100,35 @@ class BaseCharacter(ABC):
         
         # If there's a sprite, render it
         if self.sprite:
-            screen.blit(self.sprite, self.position)
+            # Check if character is alive
+            if self.is_alive():
+                # Normal rendering
+                screen.blit(self.sprite, self.position)
+            else:
+                # For defeated characters, render with reduced alpha
+                sprite_copy = self.sprite.copy()
+                sprite_copy.set_alpha(128)  # Semi-transparent
+                screen.blit(sprite_copy, self.position)
+                
+                # Draw an X over defeated characters
+                x1 = self.position[0]
+                y1 = self.position[1]
+                x2 = x1 + self.sprite.get_width()
+                y2 = y1 + self.sprite.get_height()
+                
+                pygame.draw.line(screen, (255, 0, 0), (x1, y1), (x2, y2), 2)
+                pygame.draw.line(screen, (255, 0, 0), (x1, y2), (x2, y1), 2)
     
+    def get_animation_type(self):
+        """
+        Get the appropriate animation type for this character
+        
+        Returns:
+            str: Animation type ("slash", "arrow", "spell")
+        """
+        # Default implementation, overridden by subclasses
+        return "slash"
+
     def can_attack(self):
         """Check if character can attack (cooldown expired)"""
         return self.attack_cooldown <= 0 and self.alive

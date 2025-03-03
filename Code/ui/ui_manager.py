@@ -2,6 +2,7 @@
 UI Manager - Handles all UI rendering for party-based system
 """
 import pygame
+import math
 from game.config import (
     SCREEN_WIDTH, SCREEN_HEIGHT, UI_FONT, UI_FONT_SIZE, UI_PADDING,
     HEALTH_BAR_HEIGHT, XP_BAR_HEIGHT, COMBAT_LOG_LINES, COMBAT_LOG_WIDTH,
@@ -241,54 +242,93 @@ class UIManager:
         Args:
             screen (pygame.Surface): The screen to render to
         """
+        # Render background using animation helper if available
+        if hasattr(self.game_state, 'animation_helper'):
+            self.game_state.animation_helper.render(screen)
+        else:
+            # Fallback to basic background if no animation helper
+            screen.fill((0, 0, 0))
+
         # Use party battle UI to render party members
         self.party_battle_ui.render(screen, self.font, self.health_bar, self.xp_bar)
         
-        # Render enemies
+        # Render enemies with improved positioning
         enemy_x = (SCREEN_WIDTH * 3) // 4
         enemy_y = SCREEN_HEIGHT // 2
-        enemy_spacing = 80
-        
-        for i, enemy in enumerate(self.game_state.enemies):
-            if enemy.is_alive():
-                # Position enemies in a row or column based on count
-                if len(self.game_state.enemies) <= 3:
-                    offset_x = (i - (len(self.game_state.enemies) - 1) / 2) * enemy_spacing
-                    enemy_pos_x = enemy_x + offset_x
-                    enemy_pos_y = enemy_y
-                else:
-                    # Grid layout for more than 3 enemies
-                    col = i % 2
-                    row = i // 2
-                    enemy_pos_x = enemy_x + (col - 0.5) * enemy_spacing
-                    enemy_pos_y = enemy_y + (row - len(self.game_state.enemies) // 4) * enemy_spacing
-                
-                # Render enemy
-                enemy.render(screen, (enemy_pos_x - enemy.sprite.get_width() // 2,
-                                     enemy_pos_y - enemy.sprite.get_height() // 2))
-                
-                # Render enemy health bar
-                self._render_health_bar(screen, enemy, enemy_pos_x, enemy_pos_y + 30)
-                
-                # Render enemy name and level
-                name_text = self.font.render(f"{enemy.name} (Lv.{enemy.level})", True, self.colors["text"])
-                name_rect = name_text.get_rect(center=(enemy_pos_x, enemy_pos_y - 30))
-                screen.blit(name_text, name_rect)
-                
-                # Highlight target if in target selection mode
-                if self.game_state.selecting_target and enemy in self.game_state.potential_targets:
-                    pygame.draw.rect(
-                        screen,
-                        (255, 255, 0),
-                        (enemy_pos_x - enemy.sprite.get_width() // 2 - 5,
-                         enemy_pos_y - enemy.sprite.get_height() // 2 - 5,
-                         enemy.sprite.get_width() + 10,
-                         enemy.sprite.get_height() + 10),
-                        2  # Border width
-                    )
+        enemy_spacing_x = 120  # Increase horizontal spacing
+        enemy_spacing_y = 100  # Increase vertical spacing
+
+        # Get living enemies
+        living_enemies = [enemy for enemy in self.game_state.enemies if enemy.is_alive()]
+
+        # Calculate grid dimensions based on enemy count
+        if len(living_enemies) <= 3:
+            columns = len(living_enemies)
+            rows = 1
+        else:
+            columns = 2
+            rows = math.ceil(len(living_enemies) / 2)
+
+        # Calculate total width and height of the grid
+        total_width = (columns - 1) * enemy_spacing_x
+        total_height = (rows - 1) * enemy_spacing_y
+
+        # Start position for the first enemy
+        start_x = enemy_x - total_width / 2
+        start_y = enemy_y - total_height / 2
+
+        # Position each enemy
+        for i, enemy in enumerate(living_enemies):
+            row = i // columns
+            col = i % columns
+            
+            enemy_pos_x = start_x + col * enemy_spacing_x
+            enemy_pos_y = start_y + row * enemy_spacing_y
+            
+            # Render enemy
+            enemy.render(screen, (enemy_pos_x - enemy.sprite.get_width() // 2,
+                                enemy_pos_y - enemy.sprite.get_height() // 2))
+            
+            # Render enemy health bar
+            self._render_health_bar(screen, enemy, enemy_pos_x, enemy_pos_y + 30)
+            
+            # Render enemy name and level
+            name_text = self.font.render(f"{enemy.name} (Lv.{enemy.level})", True, self.colors["text"])
+            name_rect = name_text.get_rect(center=(enemy_pos_x, enemy_pos_y - 30))
+            screen.blit(name_text, name_rect)
+            
+            # Highlight target if in target selection mode
+            if self.game_state.selecting_target and enemy in self.game_state.potential_targets:
+                pygame.draw.rect(
+                    screen,
+                    (255, 255, 0),
+                    (enemy_pos_x - enemy.sprite.get_width() // 2 - 5,
+                    enemy_pos_y - enemy.sprite.get_height() // 2 - 5,
+                    enemy.sprite.get_width() + 10,
+                    enemy.sprite.get_height() + 10),
+                    2  # Border width
+                )
         
         # Render combat log
         self._render_combat_log(screen)
+        
+        # Render battle animations if any
+        if hasattr(self.game_state, 'battle_manager') and self.game_state.battle_manager:
+            self.game_state.battle_manager.render_animations(screen)
+        
+        # Render rest counter if available
+        if hasattr(self.game_state, 'rests_taken'):
+            rest_icon = "🔥"  # Alternative to emoji Campfire icon
+            rest_text = self.font.render(f"{rest_icon} Rests: {self.game_state.rests_taken}", True, (255, 200, 0))
+            rest_rect = rest_text.get_rect(topleft=(20, 20))
+            screen.blit(rest_text, rest_rect)
+    
+        # Render battle counter if tracking
+        if hasattr(self.game_state, 'battle_manager') and hasattr(self.game_state.battle_manager, 'combat_encounter_count'):
+            battle_text = self.font.render(f"⚔️ Battle: {self.game_state.battle_manager.combat_encounter_count}/3", 
+                                        True, (255, 255, 200))
+            battle_rect = battle_text.get_rect(topleft=(20, 50))
+            screen.blit(battle_text, battle_rect)
         
         # Render battle controls
         if self.game_state.battle_paused:
@@ -302,7 +342,7 @@ class UIManager:
         # If in target selection mode, display prompt
         if self.game_state.selecting_target:
             prompt_text = self.font.render("Select a target (1-" + str(len(self.game_state.potential_targets)) + 
-                                          "), ESC to cancel", True, (255, 255, 0))
+                                        "), ESC to cancel", True, (255, 255, 0))
             prompt_rect = prompt_text.get_rect(center=(SCREEN_WIDTH // 2, 60))
             screen.blit(prompt_text, prompt_rect)
     

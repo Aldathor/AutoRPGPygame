@@ -29,6 +29,16 @@ class Enemy(BaseCharacter):
         self.sprite = pygame.Surface((32, 48))
         self.sprite.fill((150, 150, 150))  # Gray for generic enemy
     
+    def get_animation_type(self):
+        """
+        Get the appropriate animation type for this enemy
+        
+        Returns:
+            str: Animation type
+        """
+        # Default slash for most enemies
+        return "slash"
+
     def select_target(self, party):
         """
         Select a target from the party based on targeting priority

@@ -34,10 +34,14 @@ class Goblin(Enemy):
         # Adjust XP value
         self.xp_value = int(self.xp_value * modifiers["xp_value"])
         
-        # Create a simple placeholder sprite
-        self.sprite = pygame.Surface((32, 36))
-        self.sprite.fill((100, 200, 100))  # Light green for goblin
+        # Replace colored square with ASCII sprite
+        from ui.ascii_sprites import get_enemy_sprite
+        self.sprite = get_enemy_sprite("goblin", (100, 200, 100)).surface
     
+    def get_animation_type(self):
+        """Get the animation type for goblins"""
+        return "slash"
+
     def attack_target(self, target):
         """
         Goblin attack - Has a chance to attack twice due to speed
@@ -89,10 +93,14 @@ class Orc(Enemy):
         # Adjust XP value
         self.xp_value = int(self.xp_value * modifiers["xp_value"])
         
-        # Create a simple placeholder sprite
-        self.sprite = pygame.Surface((40, 48))
-        self.sprite.fill((150, 100, 50))  # Brown for orc
+        # Replace colored square with ASCII sprite
+        from ui.ascii_sprites import get_enemy_sprite
+        self.sprite = get_enemy_sprite("orc", (150, 100, 50)).surface
     
+    def get_animation_type(self):
+        """Get the animation type for orcs"""
+        return "slash"
+
     def attack_target(self, target):
         """
         Orc attack - Powerful with a chance to stun
@@ -145,10 +153,14 @@ class Troll(Enemy):
         # Trolls have regeneration
         self.regeneration_rate = int(self.max_hp * 0.02)  # 2% HP regeneration per turn
         
-        # Create a simple placeholder sprite
-        self.sprite = pygame.Surface((48, 64))
-        self.sprite.fill((50, 150, 50))  # Dark green for troll
+        # Replace colored square with ASCII sprite
+        from ui.ascii_sprites import get_enemy_sprite
+        self.sprite = get_enemy_sprite("troll", (50, 150, 50)).surface
     
+    def get_animation_type(self):
+        """Get the animation type for trolls"""
+        return "slash"
+
     def update(self, delta_time):
         """
         Update troll with regeneration
@@ -192,10 +204,14 @@ class Skeleton(Enemy):
         # Adjust XP value
         self.xp_value = int(self.xp_value * modifiers["xp_value"])
         
-        # Create a simple placeholder sprite
-        self.sprite = pygame.Surface((32, 48))
-        self.sprite.fill((200, 200, 200))  # White for skeleton
+        # Replace colored square with ASCII sprite
+        from ui.ascii_sprites import get_enemy_sprite
+        self.sprite = get_enemy_sprite("skeleton", (200, 200, 200)).surface
     
+    def get_animation_type(self):
+        """Get the animation type for skeletons"""
+        return "slash"
+
     def take_damage(self, damage, damage_type="physical"):
         """
         Take damage with undead resistance
@@ -262,10 +278,15 @@ class Dragon(Enemy):
         self.breath_cooldown = 3.0  # Seconds
         self.breath_timer = 0.0
         
-        # Create a simple placeholder sprite
-        self.sprite = pygame.Surface((64, 64))
-        self.sprite.fill((200, 0, 0))  # Red for dragon
+        # Replace colored square with ASCII sprite
+        from ui.ascii_sprites import get_enemy_sprite
+        self.sprite = get_enemy_sprite("dragon", (200, 0, 0)).surface
     
+    def get_animation_type(self):
+        """Get the animation type for dragons"""
+        # Dragons use spell animations (breathe fire)
+        return "spell"
+
     def update(self, delta_time):
         """
         Update dragon state
