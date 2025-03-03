@@ -1,3 +1,4 @@
+
 auto_RPG_Pygame/
 ├── main.py                 # Entry point
 ├──__init__.py
