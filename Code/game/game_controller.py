@@ -16,7 +16,8 @@ from combat.battle_manager import BattleManager
 from combat.enemy_spawner import EnemySpawner
 from ui.ui_manager import UIManager
 from data.data_manager import DataManager
-from ui.character_creation import CharacterCreationDialog
+from ui.character_creation_dialog import CharacterCreationDialog
+from ui.animation_helper import AnimationHelper
 
 class GameController:
     """
@@ -38,7 +39,10 @@ class GameController:
         self.enemy_spawner = EnemySpawner(self.game_state)
         self.ui_manager = UIManager(self.game_state)
         self.data_manager = DataManager()
-        
+        from ui.animation_helper import AnimationHelper
+        self.animation_helper = AnimationHelper(screen.get_width(), screen.get_height())
+        self.game_state.animation_helper = self.animation_helper
+
         # Character creation UI
         self.character_creation_dialog = CharacterCreationDialog()
         self.character_creation_dialog.callback = self._on_character_created
@@ -55,6 +59,7 @@ class GameController:
         # Combat and rest counter
         self.combat_encounter_count = 0
         self.rests_taken = 0
+
         # Add this to the game state so UI can access it
         self.game_state.rests_taken = 0
 
@@ -816,18 +821,18 @@ class GameController:
             bar_y = self.screen.get_height() - 100
             
             # Background
-            pygame.draw.rect(screen, (50, 50, 50), (bar_x, bar_y, bar_width, bar_height))
+            pygame.draw.rect(self.screen, (50, 50, 50), (bar_x, bar_y, bar_width, bar_height))
             # Progress
             progress_width = int(bar_width * (animation_timer / animation_duration))
-            pygame.draw.rect(screen, (0, 200, 0), (bar_x, bar_y, progress_width, bar_height))
+            pygame.draw.rect(self.screen, (0, 200, 0), (bar_x, bar_y, progress_width, bar_height))
             # Border
-            pygame.draw.rect(screen, (200, 200, 200), (bar_x, bar_y, bar_width, bar_height), 2)
+            pygame.draw.rect(self.screen, (200, 200, 200), (bar_x, bar_y, bar_width, bar_height), 2)
             
             # Render continue message
             if animation_timer > animation_duration * 0.8:  # Near the end
                 continue_text = font.render("Press any key to continue...", True, (255, 255, 255))
                 continue_rect = continue_text.get_rect(center=(self.screen.get_width() // 2, self.screen.get_height() - 50))
-                screen.blit(continue_text, continue_rect)
+                self.screen.blit(continue_text, continue_rect)
             
             pygame.display.flip()
             
