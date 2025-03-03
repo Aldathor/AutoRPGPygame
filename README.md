@@ -1,3 +1,4 @@
+```
 auto_RPG_Pygame/
 ├── main.py                 # Entry point
 ├── __init__.py
@@ -39,3 +40,4 @@ auto_RPG_Pygame/
     ├── __init__.py
     ├── test_combat.py      # Combat system tests
     └── test_ai.py          # AI behavior tests
+```
