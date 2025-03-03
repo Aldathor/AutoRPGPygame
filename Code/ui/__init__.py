@@ -1,19 +1,31 @@
 """
-UI module - User interface components
+UI module initialization
+Contains UI classes and elements for rendering the game
 """
-from ui.ui_manager import UIManager
-from ui.combat_log import CombatLog
-from ui.status_bars import HealthBar, XPBar, CooldownIndicator
-from ui.party_ui import PartySelectionUI, PartyBattleUI
-from ui.character_creation import CharacterCreationDialog
 
+# Import UI components
+from .ui_manager import UIManager
+from .party_ui import PartyBattleUI
+from .character_creation_dialog import CharacterCreationDialog
+
+# Import new ASCII and animation components
+from .ascii_sprites import ASCIISprite, get_class_sprite, get_enemy_sprite
+from .animation import Animation, AttackAnimation
+from .animation_helper import AnimationHelper
+from .rest_animation import FirePitAnimation
+from .ascii_background import ASCIIBackground
+
+# Define exports
 __all__ = [
-    'UIManager', 
-    'CombatLog', 
-    'HealthBar', 
-    'XPBar', 
-    'CooldownIndicator',
-    'PartySelectionUI',
+    'UIManager',
     'PartyBattleUI',
-    'CharacterCreationDialog'
+    'CharacterCreationDialog',
+    'ASCIISprite',
+    'get_class_sprite',
+    'get_enemy_sprite',
+    'Animation',
+    'AttackAnimation',
+    'AnimationHelper',
+    'FirePitAnimation',
+    'ASCIIBackground'
 ]
