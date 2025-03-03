@@ -106,13 +106,13 @@ class ASCIIBackground:
         
         # Render forest background with reduced alpha
         overlay = pygame.Surface((self.screen_width, self.screen_height), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 150))  # Semi-transparent black
+        overlay.fill((0, 0, 0, 100))  # Semi-transparent black
         
         for y, row in enumerate(self.forest):
             for x, cell in enumerate(row):
                 text = self.font.render(cell["char"], True, cell["color"])
                 # Add some alpha to the text to make it subtle
-                text.set_alpha(128)
+                text.set_alpha(300)
                 screen.blit(text, (x * 14, y * 14))
         
         # Overlay to darken background

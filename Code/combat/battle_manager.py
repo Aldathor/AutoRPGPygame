@@ -56,6 +56,8 @@ class BattleManager:
             if self.last_action_time >= BATTLE_TIMER_INTERVAL:
                 self.last_action_time = 0
                 self._process_battle_actions()
+
+        print(f"Animations: {len(self.animations)}, Character cooldowns: {[c.attack_cooldown for c in self.game_state.party if c]}")        
     
     def _process_battle_actions(self):
         """Process one round of battle actions"""

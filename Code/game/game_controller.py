@@ -89,7 +89,8 @@ class GameController:
         if self.game_state.current_state == STATE_BATTLE and not self.game_state.battle_paused:
             self.battle_manager.update(delta_time)
             self.enemy_spawner.update(delta_time)
-        
+            self.animation_helper.update(delta_time)
+
         # Always update UI
         self.ui_manager.update(delta_time)
         

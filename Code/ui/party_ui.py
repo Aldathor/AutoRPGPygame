@@ -269,7 +269,7 @@ class PartyBattleUI:
             xp_bar (XPBar): XP bar component
         """
         # Calculate positions for party members
-        character_spacing = 120
+        character_spacing = 180
         party_center_x = SCREEN_WIDTH // 4
         party_center_y = SCREEN_HEIGHT // 2
         
@@ -277,7 +277,7 @@ class PartyBattleUI:
         for i, character in enumerate(self.game_state.party):
             if character:
                 # Calculate position (vertical arrangement)
-                char_y = party_center_y + (i - 1) * character_spacing
+                char_y = party_center_y + (i - 1) * character_spacing * 1.2
                 
                 # Highlight active character
                 if i == self.game_state.active_character_index:
