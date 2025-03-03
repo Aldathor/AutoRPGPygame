@@ -1,7 +1,6 @@
-
 auto_RPG_Pygame/
 ├── main.py                 # Entry point
-├──__init__.py
+├── __init__.py
 ├── game/
 │   ├── __init__.py
 │   ├── game_state.py       # Game state management
