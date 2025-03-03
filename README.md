@@ -37,12 +37,9 @@ auto_RPG_Pygame/
 │   ├── status_bars.py      # HP/XP bars
 │   ├── combat_log.py       # combat log for fights
 │   └── character_creation.py # Dialog for creating new characters
-├── data/
-│   ├── __init__.py
-│   ├── data_manager.py     # Save/load functionality
-│   └── character_data.py   # Character data structure
-└── tests/
+└── data/
     ├── __init__.py
-    ├── test_combat.py      # Combat system tests
-    └── test_ai.py          # AI behavior tests
+    ├── data_manager.py     # Save/load functionality
+    └── character_data.py   # Character data structure
+
 ```
