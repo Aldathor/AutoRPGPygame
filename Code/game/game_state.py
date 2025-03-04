@@ -1,12 +1,13 @@
 """
-Updated Game State to support party-based gameplay
+Updated Game State to support real-time combat
 """
 from game.config import STATE_MENU, STATE_CHARACTER_SELECT, STATE_PARTY_SELECT, STATE_BATTLE, STATE_GAME_OVER, STATE_VICTORY
+from combat.combat_state import CombatState
 
 class GameState:
     """
     Manages the current state of the game and transitions between states.
-    Implements a state machine pattern.
+    Implements a state machine pattern with real-time combat support.
     """
     def __init__(self):
         """Initialize the game state"""
@@ -32,6 +33,10 @@ class GameState:
         self.selecting_target = False
         self.target_selector = None
         self.potential_targets = []
+        
+        # Real-time combat properties
+        self.real_time_mode = True  # Flag to indicate real-time combat
+        self.combat_state_data = {}  # Store combat state for each entity
         
         # State handlers - maps state names to their update/render methods
         self.state_handlers = {
@@ -114,7 +119,7 @@ class GameState:
     
     def _handle_battle_state(self, delta_time):
         """
-        Handle updates for the battle state
+        Handle updates for the battle state in real-time mode
         
         Args:
             delta_time (float): Time since last update in seconds
@@ -122,7 +127,8 @@ class GameState:
         if not self.battle_paused:
             self.battle_timer += delta_time
             
-            # Check for battle end conditions
+            # In real-time mode, battle end conditions are checked by the battle manager
+            # The basic end-condition checks remain as a fallback
             if not self._is_party_alive():
                 self.defeat_count += 1
                 self.change_state(STATE_GAME_OVER)
@@ -256,3 +262,32 @@ class GameState:
         
         # If we get here, no living characters were found
         return self.active_character_index
+        
+    # Real-time combat specific methods
+    def get_entity_combat_state(self, entity):
+        """
+        Get the combat state data for an entity
+        
+        Args:
+            entity (BaseCharacter): The entity to get state for
+            
+        Returns:
+            dict: Combat state data or empty dict if not found
+        """
+        entity_id = id(entity)
+        return self.combat_state_data.get(entity_id, {})
+    
+    def set_entity_combat_state(self, entity, state_data):
+        """
+        Set the combat state data for an entity
+        
+        Args:
+            entity (BaseCharacter): The entity to set state for
+            state_data (dict): Combat state data to store
+        """
+        entity_id = id(entity)
+        self.combat_state_data[entity_id] = state_data
+    
+    def clear_combat_states(self):
+        """Clear all stored combat states"""
+        self.combat_state_data = {}

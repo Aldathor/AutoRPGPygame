@@ -8,11 +8,16 @@ from game.config import (
     STATE_MENU, STATE_CHARACTER_SELECT, STATE_PARTY_SELECT, STATE_BATTLE, 
     STATE_GAME_OVER, STATE_VICTORY, MAX_PARTY_SIZE
 )
-from game.events import register_event_handler, EVENT_CONTINUE_TO_NEXT_BATTLE
+from game.events import (
+    register_event_handler, EVENT_CONTINUE_TO_NEXT_BATTLE,
+    EVENT_COMBAT_ATTACK_START, EVENT_COMBAT_ATTACK_HIT,
+    EVENT_COMBAT_ENTITY_DEFEATED, EVENT_TARGET_SELECTION_START
+)
 from entities.player_classes.warrior import Warrior
 from entities.player_classes.archer import Archer
 from entities.player_classes.mage import Mage
-from combat.battle_manager import BattleManager
+from combat.realtime_battle_manager import RealtimeBattleManager
+from combat.combat_state import CombatState, CombatEventQueue
 from combat.enemy_spawner import EnemySpawner
 from ui.ui_manager import UIManager
 from data.data_manager import DataManager
@@ -25,7 +30,7 @@ class GameController:
     """
     def __init__(self, screen):
         """
-        Initialize the game controller
+        Initialize the game controller with real-time battle support
         
         Args:
             screen (pygame.Surface): The main game screen
@@ -35,7 +40,10 @@ class GameController:
         
         self.screen = screen
         self.game_state = GameState()
-        self.battle_manager = BattleManager(self.game_state)
+        
+        # Use RealtimeBattleManager instead of BattleManager
+        self.battle_manager = RealtimeBattleManager(self.game_state)
+        
         self.enemy_spawner = EnemySpawner(self.game_state)
         self.ui_manager = UIManager(self.game_state)
         self.data_manager = DataManager()
@@ -71,13 +79,16 @@ class GameController:
         
         # Register event handlers
         register_event_handler(EVENT_CONTINUE_TO_NEXT_BATTLE, self._continue_to_next_battle)
+        register_event_handler(EVENT_COMBAT_ENTITY_DEFEATED, self._on_entity_defeated)
+        register_event_handler(EVENT_COMBAT_ATTACK_HIT, self._on_attack_hit)
+        register_event_handler(EVENT_TARGET_SELECTION_START, self._on_target_selection_start)
         
         # Debug flag
         self.debug = True
     
     def update(self, delta_time):
         """
-        Update the game state and all systems
+        Update the game state and all systems with real-time combat support
         
         Args:
             delta_time (float): Time since last update in seconds
@@ -87,9 +98,17 @@ class GameController:
         
         # Update battle-specific systems if in battle state
         if self.game_state.current_state == STATE_BATTLE and not self.game_state.battle_paused:
+            # Update real-time battle manager
             self.battle_manager.update(delta_time)
+            
+            # Update enemy spawner
             self.enemy_spawner.update(delta_time)
+            
+            # Update animation helper
             self.animation_helper.update(delta_time)
+            
+            # Update character positions and states
+            self._update_combat_entities(delta_time)
 
         # Always update UI
         self.ui_manager.update(delta_time)
@@ -98,6 +117,23 @@ class GameController:
         if self.character_creation_dialog.active:
             self.character_creation_dialog.update(delta_time)
     
+    def _update_combat_entities(self, delta_time):
+        """
+        Update all combat entities (characters and enemies) for real-time combat
+        
+        Args:
+            delta_time (float): Time since last update in seconds
+        """
+        # Update party members
+        for character in self.game_state.party:
+            if character and character.is_alive():
+                character.update(delta_time)
+        
+        # Update enemies
+        for enemy in self.game_state.enemies:
+            if enemy.is_alive():
+                enemy.update(delta_time)
+
     def render(self):
         """Render the current game state"""
         # Let the UI manager handle all rendering
@@ -648,7 +684,7 @@ class GameController:
             print("Party is full")
     
     def _start_battle(self):
-        """Start a battle with the current party"""
+        """Start a battle with the current party using real-time battle system"""
         # Ensure we have at least one character
         if not any(self.game_state.party):
             print("Need at least one character in party to start battle")
@@ -672,13 +708,38 @@ class GameController:
         # Start the battle
         self.game_state.change_state(STATE_BATTLE)
         
+        # Initialize combat positions
+        self._initialize_combat_positions()
+        
         # Spawn initial enemies
         num_enemies = self._determine_enemy_count()
         self.enemy_spawner.spawn_enemy_group(num_enemies)
         
+        # Start the real-time battle manager
+        self.battle_manager.start_battle()
+        
         if self.debug:
-            print(f"Started battle with {num_enemies} enemies")
-    
+            print(f"Started real-time battle with {num_enemies} enemies")
+
+    def _initialize_combat_positions(self):
+        """
+        Initialize positions for all entities in combat
+        """
+        # Position party members on the left side
+        party_center_x = self.screen.get_width() // 4
+        party_center_y = self.screen.get_height() // 2
+        character_spacing = 150
+        
+        for i, character in enumerate(self.game_state.party):
+            if character:
+                # Calculate vertical position
+                char_y = party_center_y + (i - 1) * character_spacing
+                
+                # Set position (ensure character has a position attribute)
+                character.position = pygame.Vector2(party_center_x, char_y)
+        
+        # Enemy positions will be set by the enemy spawner
+
     def _determine_enemy_count(self):
         """
         Determine how many enemies to spawn based on party size and strength
@@ -701,7 +762,7 @@ class GameController:
             return 3
     
     def _start_target_selection(self):
-        """Start the target selection process"""
+        """Start the target selection process using real-time battle manager"""
         # Get active character
         active_char_idx = self.game_state.active_character_index
         if not (0 <= active_char_idx < len(self.game_state.party) and 
@@ -709,57 +770,74 @@ class GameController:
                 self.game_state.party[active_char_idx].is_alive()):
             return
         
-        # Get living enemies as potential targets
-        living_enemies = [enemy for enemy in self.game_state.enemies if enemy.is_alive()]
-        if not living_enemies:
-            return
+        # Use the real-time battle manager to initiate target selection
+        character = self.game_state.party[active_char_idx]
+        target_selection_initiated = self.battle_manager.initiate_target_selection(character)
+        
+        if target_selection_initiated:
+            self.selecting_target = True
+            self.available_targets = self.game_state.potential_targets
             
-        # Set target selection state
-        self.selecting_target = True
-        self.available_targets = living_enemies
-        
-        # Update game state to reflect target selection mode
-        self.game_state.selecting_target = True
-        self.game_state.potential_targets = living_enemies
-        
-        if self.debug:
-            print(f"Started target selection with {len(living_enemies)} enemies")
+            if self.debug:
+                print(f"Started real-time target selection with {len(self.available_targets)} enemies")
     
     def _select_target(self, target):
         """
-        Select a target for the active character to attack
+        Select a target for the active character to attack using real-time battle system
         
         Args:
             target (BaseCharacter): The selected target
         """
-        # Get active character
-        active_char_idx = self.game_state.active_character_index
-        if not (0 <= active_char_idx < len(self.game_state.party) and 
-                self.game_state.party[active_char_idx] and 
-                self.game_state.party[active_char_idx].is_alive() and
-                self.game_state.party[active_char_idx].can_attack()):
+        if not self.selecting_target:
             return
         
-        # Execute attack
-        character = self.game_state.party[active_char_idx]
-        result = character.attack_target(target)
+        # Use the real-time battle manager to select target
+        target_index = self.available_targets.index(target) if target in self.available_targets else -1
         
-        # Log the attack
-        self.battle_manager._log_attack(character, target, result)
-        
-        # Check if enemy died
-        if not target.is_alive():
-            self.battle_manager._handle_enemy_defeat(target, character)
+        if target_index >= 0:
+            self.battle_manager.select_target(target_index)
             
-        # Reset target selection state
-        self.selecting_target = False
-        self.available_targets = []
-        self.game_state.selecting_target = False
-        self.game_state.potential_targets = []
-        
-        if self.debug:
-            print(f"{character.name} attacked {target.name} for {result.get('damage', 0)} damage")
+            # Reset target selection state (battle manager also handles this)
+            self.selecting_target = False
+            self.available_targets = []
+            
+            if self.debug:
+                print(f"Selected target: {target.name}")
     
+    def _on_entity_defeated(self, entity, defeater=None):
+        """
+        Handle entity defeated event
+        
+        Args:
+            entity (BaseCharacter): The defeated entity
+            defeater (BaseCharacter, optional): The entity that defeated it
+        """
+        if entity in self.game_state.enemies:
+            if self.debug:
+                print(f"Enemy defeated: {entity.name}")
+
+    def _on_attack_hit(self, attacker, target, result):
+        """
+        Handle attack hit event
+        
+        Args:
+            attacker (BaseCharacter): The attacking entity
+            target (BaseCharacter): The target entity
+            result (dict): Attack result data
+        """
+        # Could add special effects or other logic here
+        pass
+
+    def _on_target_selection_start(self, character):
+        """
+        Handle target selection start event
+        
+        Args:
+            character (BaseCharacter): The character selecting a target
+        """
+        # Update UI state or other game elements here
+        pass    
+
     def _take_rest(self):
         """
         Take a rest to restore party's health and revive fallen characters
