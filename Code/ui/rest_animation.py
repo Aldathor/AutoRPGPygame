@@ -1,16 +1,16 @@
 """
-Fire pit animation for rest periods
+Placeholder for rest animation (to be replaced with sprite animation)
 """
 import pygame
 import random
 
 class FirePitAnimation:
     """
-    Fire pit ASCII animation
+    Placeholder for fire pit animation
     """
     def __init__(self, screen_width, screen_height):
         """
-        Initialize the fire pit animation
+        Initialize a simple rest animation
         
         Args:
             screen_width (int): Width of the screen
@@ -18,84 +18,36 @@ class FirePitAnimation:
         """
         self.screen_width = screen_width
         self.screen_height = screen_height
-        self.font = pygame.font.SysFont("Courier New", 16)
         
-        # Fire pit ASCII frames
-        self.fire_frames = [
-            [
-                "    {()))))}    ",
-                "   {(()))))}))   ",
-                "  {(((()))))))  ",
-                "  {((((()))))))  ",
-                " {((((()))))))} ",
-                "{(((((()))))))}",
-                " ~~~~~~~~~~~~~~ ",
-                "                "
-            ],
-            [
-                "    {()))))}    ",
-                "   {(()))))}))   ",
-                "  {(((()))))))}  ",
-                "  {((((()))))))}  ",
-                " {((((()))))))))} ",
-                "{((((((()))))))))}",
-                " ~~~~~~~~~~~~~~ ",
-                "                "
-            ],
-            [
-                "    {()))))}    ",
-                "   {(()))))))}   ",
-                "  {(((()))))))}  ",
-                "  {((((())))))))  ",
-                " {(((((()))))))) ",
-                "{((((((()))))))))}",
-                " ~~~~~~~~~~~~~~ ",
-                "                "
-            ]
-        ]
-        
-        # Fire colors
-        self.fire_colors = [
-            (255, 100, 0),    # Orange
-            (255, 50, 0),     # Reddish orange
-            (255, 150, 0),    # Lighter orange
-            (200, 0, 0)       # Red
-        ]
-        
-        # Sparks
-        self.sparks = []
-        for _ in range(20):
-            self.sparks.append({
-                "x": random.randint(0, self.screen_width),
-                "y": random.randint(0, self.screen_height),
-                "speed": random.uniform(0.5, 2.0),
-                "color": random.choice(self.fire_colors),
-                "char": random.choice(["'", ".", "*", "`"])
+        # Fire particles
+        self.particles = []
+        for _ in range(50):
+            self.particles.append({
+                "x": screen_width // 2 + random.randint(-30, 30),
+                "y": screen_height // 2 + random.randint(-10, 10),
+                "size": random.randint(2, 8),
+                "color": (random.randint(200, 255), random.randint(50, 150), 0),
+                "speed": random.uniform(20, 60)
             })
-        
-        self.current_frame = 0
-        self.frame_timer = 0
-        self.frame_duration = 0.3  # seconds between frames
     
     def update(self, delta_time):
         """
-        Update the fire pit animation
+        Update the fire animation
         
         Args:
             delta_time (float): Time since last update in seconds
         """
-        # Update frame
-        self.frame_timer += delta_time
-        if self.frame_timer >= self.frame_duration:
-            self.frame_timer = 0
-            self.current_frame = (self.current_frame + 1) % len(self.fire_frames)
-        
-        # Update sparks
-        for spark in self.sparks:
-            spark["y"] -= spark["speed"]
-            if spark["y"] < 0:
-                spark["y"] = self.screen_height
-                spark["x"] = random.randint(0, self.screen_width)
+        # Update fire particles
+        for particle in self.particles:
+            particle["y"] -= particle["speed"] * delta_time
+            particle["size"] -= random.uniform(5, 15) * delta_time
+            
+            if particle["size"] <= 0:
+                # Reset particle
+                particle["x"] = self.screen_width // 2 + random.randint(-30, 30)
+                particle["y"] = self.screen_height // 2 + random.randint(-10, 10)
+                particle["size"] = random.randint(2, 8)
+                particle["color"] = (random.randint(200, 255), random.randint(50, 150), 0)
     
     def render(self, screen):
         """
@@ -109,32 +61,30 @@ class FirePitAnimation:
         overlay.fill((0, 0, 0, 200))  # Semi-transparent black
         screen.blit(overlay, (0, 0))
         
-        # Draw fire pit
-        frame = self.fire_frames[self.current_frame]
-        frame_width = len(frame[0]) * 10  # Approximate width
-        frame_height = len(frame) * 20  # Approximate height
+        # Draw a "log" for the fire
+        log_rect = pygame.Rect(
+            self.screen_width // 2 - 50,
+            self.screen_height // 2 + 20,
+            100,
+            20
+        )
+        pygame.draw.rect(screen, (139, 69, 19), log_rect)  # Brown log
         
-        # Center position
-        x = (self.screen_width - frame_width) // 2
-        y = (self.screen_height - frame_height) // 2
+        # Draw fire particles
+        for particle in self.particles:
+            if particle["size"] > 0:
+                pygame.draw.circle(
+                    screen,
+                    particle["color"],
+                    (int(particle["x"]), int(particle["y"])),
+                    int(particle["size"])
+                )
         
-        for i, line in enumerate(frame):
-            for j, char in enumerate(line):
-                color = self.fire_colors[0]  # Default color
-                if char in "{(}))":  # Fire characters
-                    color = random.choice(self.fire_colors)
-                elif char == "~":  # Log characters
-                    color = (139, 69, 19)  # Brown
-                
-                text = self.font.render(char, True, color)
-                screen.blit(text, (x + j * 10, y + i * 20))
-        
-        # Draw sparks
-        for spark in self.sparks:
-            text = self.font.render(spark["char"], True, spark["color"])
-            screen.blit(text, (spark["x"], spark["y"]))
-        
-        # Draw campfire area - circle around the fire
-        pygame.draw.circle(screen, (30, 30, 30), 
-                         (self.screen_width // 2, self.screen_height // 2),
-                         frame_height + 20, 3)
+        # Draw a circle on the ground
+        pygame.draw.circle(
+            screen,
+            (50, 50, 50),
+            (self.screen_width // 2, self.screen_height // 2 + 30),
+            70,
+            3
+        )

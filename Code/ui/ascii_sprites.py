@@ -1,136 +1,69 @@
 """
-ASCII Sprites for characters and enemies
+Placeholder for sprite system
 """
 import pygame
 
 class ASCIISprite:
     """
-    Class to handle ASCII character-based sprites
+    Placeholder class for sprite rendering, will be replaced with proper sprites
     """
-    def __init__(self, ascii_art, fg_color=(255, 255, 255), bg_color=(0, 0, 0, 0)):
+    def __init__(self, ascii_art=None, fg_color=(255, 255, 255), bg_color=(0, 0, 0, 0)):
         """
-        Initialize an ASCII sprite
-        
-        Args:
-            ascii_art (list): List of strings representing ASCII art
-            fg_color (tuple): Foreground color (RGB)
-            bg_color (tuple): Background color (RGBA with alpha)
+        Initialize a placeholder sprite
         """
-        self.ascii_art = ascii_art
         self.fg_color = fg_color
         self.bg_color = bg_color
-        self.font = pygame.font.SysFont("Courier New", 14)  # Monospace font
         
-        # Calculate dimensions
-        self.width = max(len(line) for line in ascii_art) * 8  # Approximate width based on font
-        self.height = len(ascii_art) * 16  # Approximate height based on font
+        # Calculate dimensions for placeholder
+        self.width = 32
+        self.height = 48
         
-        # Create the surface
+        # Create a simple placeholder surface
         self.surface = self._create_surface()
     
     def _create_surface(self):
         """
-        Create a pygame surface with the ASCII art
-        
-        Returns:
-            pygame.Surface: The created surface
+        Create a simple colored rectangle surface
         """
         surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         surface.fill(self.bg_color)
         
-        for i, line in enumerate(self.ascii_art):
-            text_surface = self.font.render(line, True, self.fg_color)
-            surface.blit(text_surface, (0, i * 16))  # 16 is the approximate line height
+        # Draw a colored rectangle
+        pygame.draw.rect(surface, self.fg_color, (0, 0, self.width, self.height))
         
         return surface
     
     def render(self, screen, position):
         """
-        Render the ASCII sprite
-        
-        Args:
-            screen (pygame.Surface): The screen to render to
-            position (tuple): The position (x, y) to render at
+        Render the placeholder sprite
         """
         screen.blit(self.surface, position)
 
-# Character class sprites
-WARRIOR_SPRITE = [
-    "   O   ",
-    "  /|\\  ",
-    " _/ \\_ ",
-    "   |   ",
-    "  / \\  "
-]
-
-ARCHER_SPRITE = [
-    "   O   ",
-    "  /|---->",
-    " _/ \\_  ",
-    "   |   ",
-    "  / \\  "
-]
-
-MAGE_SPRITE = [
-    "   O   ",
-    "  /|\\* ",
-    " _/ \\_ ",
-    "   |   ",
-    "  / \\  "
-]
-
-# Enemy sprites
-GOBLIN_SPRITE = [
-    "  ^-^  ",
-    "  |0|  ",
-    "  / \\  "
-]
-
-ORC_SPRITE = [
-    "  #-#  ",
-    "  |O|  ",
-    " // \\\\ "
-]
-
-TROLL_SPRITE = [
-    "  @-@  ",
-    "  |O|  ",
-    " // \\\\ "
-]
-
-SKELETON_SPRITE = [
-    "  X_X  ",
-    "  |o|  ",
-    "  / \\  "
-]
-
-DRAGON_SPRITE = [
-    "   ^v^   ",
-    "  <|O|>  ",
-    "   /|\\   ",
-    "  // \\\\ "
-]
-
-# Function to get sprite for a character class
+# Functions to get sprites for characters and enemies
 def get_class_sprite(class_name, fg_color=(255, 255, 255)):
+    """
+    Get a placeholder sprite for a character class
+    """
     if class_name.lower() == "warrior":
-        return ASCIISprite(WARRIOR_SPRITE, fg_color)
+        return ASCIISprite(None, (200, 0, 0))
     elif class_name.lower() == "archer":
-        return ASCIISprite(ARCHER_SPRITE, fg_color)
+        return ASCIISprite(None, (0, 200, 0))
     elif class_name.lower() == "mage":
-        return ASCIISprite(MAGE_SPRITE, fg_color)
-    return None
+        return ASCIISprite(None, (0, 0, 200))
+    return ASCIISprite()
 
-# Function to get sprite for an enemy type
 def get_enemy_sprite(enemy_type, fg_color=(255, 255, 255)):
+    """
+    Get a placeholder sprite for an enemy type
+    """
     if enemy_type.lower() == "goblin":
-        return ASCIISprite(GOBLIN_SPRITE, fg_color)
+        return ASCIISprite(None, (100, 200, 100))
     elif enemy_type.lower() == "orc":
-        return ASCIISprite(ORC_SPRITE, fg_color)
+        return ASCIISprite(None, (150, 100, 50))
     elif enemy_type.lower() == "troll":
-        return ASCIISprite(TROLL_SPRITE, fg_color)
+        return ASCIISprite(None, (50, 150, 50))
     elif enemy_type.lower() == "skeleton":
-        return ASCIISprite(SKELETON_SPRITE, fg_color)
+        return ASCIISprite(None, (200, 200, 200))
     elif enemy_type.lower() == "dragon":
-        return ASCIISprite(DRAGON_SPRITE, fg_color)
-    return None
+        return ASCIISprite(None, (200, 0, 0))
+    return ASCIISprite()

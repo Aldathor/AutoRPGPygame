@@ -1,12 +1,16 @@
 """
-Placeholder for animation helper (to be replaced with sprite animation system)
+Animation helper for coordinating various animations and visual effects
 """
 import pygame
 import random
+from ui.animation import AttackAnimation
+from ui.rest_animation import FirePitAnimation
+from ui.ascii_background import ASCIIBackground
+from ui.ascii_sprites import get_class_sprite, get_enemy_sprite
 
 class AnimationHelper:
     """
-    Helper class to coordinate animations and visual effects
+    Helper class to coordinate animations and keep track of visual state
     """
     def __init__(self, screen_width, screen_height):
         """
@@ -19,11 +23,15 @@ class AnimationHelper:
         self.screen_width = screen_width
         self.screen_height = screen_height
         
+        # Create background
+        self.background = ASCIIBackground(screen_width, screen_height)
+        
         # Animation lists
         self.attack_animations = []
         self.particle_effects = []
         
         # Timing and state
+        self.last_update_time = 0
         self.animation_paused = False
     
     def update(self, delta_time):
@@ -36,6 +44,9 @@ class AnimationHelper:
         if self.animation_paused:
             return
             
+        # Update background
+        self.background.update(delta_time)
+        
         # Update attack animations, remove completed ones
         self.attack_animations = [anim for anim in self.attack_animations if anim.update()]
         
@@ -57,21 +68,19 @@ class AnimationHelper:
         Args:
             screen (pygame.Surface): The screen to render to
         """
-        # Fill with a simple background color
-        screen.fill((30, 30, 50))  # Dark blue-gray background
+        # Render background
+        self.background.render(screen)
         
         # Render attack animations
         for animation in self.attack_animations:
             animation.render(screen)
         
-        # Render simple particle effects
+        # Render particle effects
         for particle in self.particle_effects:
-            pygame.draw.circle(
-                screen,
-                particle["color"],
-                (int(particle["x"]), int(particle["y"])),
-                int(particle["size"] * (particle["life"] / particle["max_life"]))
-            )
+            font = pygame.font.SysFont("Courier New", particle["size"])
+            text = font.render(particle["char"], True, particle["color"])
+            text.set_alpha(int(255 * (particle["life"] / particle["max_life"])))
+            screen.blit(text, (particle["x"], particle["y"]))
     
     def add_attack_animation(self, attacker, target, animation_type=None):
         """
@@ -100,7 +109,6 @@ class AnimationHelper:
                     animation_type = "spell"
         
         # Create animation
-        from ui.animation import AttackAnimation
         animation = AttackAnimation(attacker, target, animation_type)
         animation.start()
         self.attack_animations.append(animation)
@@ -112,7 +120,7 @@ class AnimationHelper:
     
     def add_hit_particles(self, x, y, effect_type="slash", count=10):
         """
-        Add simple particle effects for a hit
+        Add particle effects for a hit
         
         Args:
             x (int): X position
@@ -122,13 +130,17 @@ class AnimationHelper:
         """
         for _ in range(count):
             if effect_type == "slash":
-                color = (255, 0, 0)  # Red for slash
+                chars = ["/", "\\", "|", "-"]
+                colors = [(255, 0, 0), (255, 50, 50)]
             elif effect_type == "arrow":
-                color = (0, 255, 0)  # Green for arrows
+                chars = [">", "}", ")", "-"]
+                colors = [(0, 255, 0), (50, 255, 50)]
             elif effect_type == "spell":
-                color = (0, 0, 255)  # Blue for spells
+                chars = ["*", "+", ".", "o"]
+                colors = [(0, 100, 255), (100, 100, 255), (200, 100, 255)]
             else:
-                color = (255, 255, 255)  # White default
+                chars = ["*", "+", ".", "o"]
+                colors = [(255, 255, 255), (200, 200, 200)]
             
             # Create particle
             self.particle_effects.append({
@@ -136,20 +148,20 @@ class AnimationHelper:
                 "y": y,
                 "vx": random.uniform(-30, 30),
                 "vy": random.uniform(-30, 30),
-                "color": color,
-                "size": random.randint(2, 5),
+                "char": random.choice(chars),
+                "color": random.choice(colors),
+                "size": random.randint(10, 20),
                 "life": random.uniform(0.3, 1.0),
                 "max_life": random.uniform(0.3, 1.0)
             })
     
     def create_rest_animation(self):
         """
-        Create a placeholder for rest animation
+        Create a fire pit animation for resting
         
         Returns:
-            object: A placeholder object for rest animation
+            FirePitAnimation: The fire pit animation
         """
-        from ui.rest_animation import FirePitAnimation
         return FirePitAnimation(self.screen_width, self.screen_height)
     
     def pause_animations(self):

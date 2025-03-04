@@ -1,16 +1,16 @@
 """
-ASCII forest background with animated elements
+Placeholder for background (to be replaced with sprite-based background)
 """
 import pygame
 import random
 
 class ASCIIBackground:
     """
-    Animated ASCII background for the game
+    Placeholder for background rendering
     """
     def __init__(self, screen_width, screen_height):
         """
-        Initialize the ASCII background
+        Initialize a simple background
         
         Args:
             screen_width (int): Width of the screen
@@ -18,59 +18,19 @@ class ASCIIBackground:
         """
         self.screen_width = screen_width
         self.screen_height = screen_height
-        self.font = pygame.font.SysFont("Courier New", 14)
         
-        # Forest characters
-        self.tree_chars = ["Y", "T", "^"]
-        self.ground_chars = ["_", ".", ",", "`"]
-        self.path_chars = [" ", ".", ","]
+        # Create some background elements
+        self.elements = []
         
-        # Generate forest
-        self.forest = []
-        path_center = screen_width // 2
-        path_width = 200
-        
-        for y in range(0, screen_height, 14):
-            row = []
-            for x in range(0, screen_width, 14):
-                # Determine if this position is on the path
-                distance_from_path = abs(x - path_center)
-                if distance_from_path < path_width // 2:
-                    # On path
-                    char = random.choice(self.path_chars)
-                    color = (139, 69, 19)  # Brown
-                    if char in [".", ","]:
-                        color = (160, 82, 45)  # Sienna
-                else:
-                    # In forest
-                    if random.random() < 0.1:
-                        char = random.choice(self.tree_chars)
-                        color = (0, 100, 0)  # Dark green
-                    else:
-                        char = random.choice(self.ground_chars)
-                        color = (0, 128, 0)  # Green
-                
-                row.append({
-                    "char": char,
-                    "color": color,
-                    "animation": random.random() < 0.05,  # 5% chance to animate
-                    "animation_timer": random.random() * 2.0,
-                    "animation_period": random.uniform(1.0, 3.0)
-                })
-            self.forest.append(row)
-        
-        # Path overlay for combat
-        self.path = []
-        for y in range(screen_height // 2 - 50, screen_height // 2 + 50, 14):
-            row = []
-            for x in range(path_center - path_width // 2, path_center + path_width // 2, 14):
-                row.append({
-                    "x": x,
-                    "y": y,
-                    "char": random.choice(self.path_chars),
-                    "color": (139, 69, 19)  # Brown
-                })
-            self.path.append(row)
+        # Generate some random stars/elements
+        for _ in range(100):
+            self.elements.append({
+                "x": random.randint(0, screen_width),
+                "y": random.randint(0, screen_height),
+                "size": random.randint(1, 3),
+                "color": (random.randint(180, 255), random.randint(180, 255), random.randint(180, 255)),
+                "speed": random.random()
+            })
     
     def update(self, delta_time):
         """
@@ -79,47 +39,39 @@ class ASCIIBackground:
         Args:
             delta_time (float): Time since last update in seconds
         """
-        # Update animated elements
-        for row in self.forest:
-            for cell in row:
-                if cell["animation"]:
-                    cell["animation_timer"] += delta_time
-                    if cell["animation_timer"] >= cell["animation_period"]:
-                        cell["animation_timer"] = 0
-                        # Change character for animation effect
-                        if cell["char"] in self.tree_chars:
-                            cell["char"] = random.choice(self.tree_chars)
-                        elif cell["char"] in self.ground_chars:
-                            cell["char"] = random.choice(self.ground_chars)
-                        elif cell["char"] in self.path_chars:
-                            cell["char"] = random.choice(self.path_chars)
+        # Move some elements slightly for a subtle animation effect
+        for element in self.elements:
+            element["y"] += element["speed"] * delta_time * 10
+            if element["y"] > self.screen_height:
+                element["y"] = 0
+                element["x"] = random.randint(0, self.screen_width)
     
     def render(self, screen):
         """
-        Render the ASCII background
+        Render the background
         
         Args:
             screen (pygame.Surface): The screen to render to
         """
-        # Clear screen first
-        screen.fill((0, 0, 0))
+        # Clear screen with a dark color
+        screen.fill((20, 20, 30))
         
-        # Render forest background with reduced alpha
-        overlay = pygame.Surface((self.screen_width, self.screen_height), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 100))  # Semi-transparent black
+        # Draw path in the center
+        path_width = 200
+        path_center = self.screen_width // 2
+        path_rect = pygame.Rect(
+            path_center - path_width // 2,
+            0,
+            path_width,
+            self.screen_height
+        )
+        pygame.draw.rect(screen, (50, 40, 30), path_rect)
         
-        for y, row in enumerate(self.forest):
-            for x, cell in enumerate(row):
-                text = self.font.render(cell["char"], True, cell["color"])
-                # Add some alpha to the text to make it subtle
-                text.set_alpha(300)
-                screen.blit(text, (x * 14, y * 14))
-        
-        # Overlay to darken background
-        screen.blit(overlay, (0, 0))
-        
-        # Render path (more visible)
-        for row in self.path:
-            for cell in row:
-                text = self.font.render(cell["char"], True, cell["color"])
-                screen.blit(text, (cell["x"], cell["y"]))
+        # Draw the random elements (stars/particles)
+        for element in self.elements:
+            pygame.draw.circle(
+                screen,
+                element["color"],
+                (int(element["x"]), int(element["y"])),
+                element["size"]
+            )
