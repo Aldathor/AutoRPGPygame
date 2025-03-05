@@ -3,6 +3,7 @@ Main game controller with party system support
 """
 import pygame
 import random
+from combat.battle_integration import add_integration_methods
 from game.game_state import GameState
 from game.config import (
     STATE_MENU, STATE_CHARACTER_SELECT, STATE_PARTY_SELECT, STATE_BATTLE, 
@@ -23,6 +24,176 @@ from ui.ui_manager import UIManager
 from data.data_manager import DataManager
 from ui.character_creation_dialog import CharacterCreationDialog
 from ui.animation_helper import AnimationHelper
+
+def patch_game_controller(game_controller):
+    """
+    Patch the GameController class with spatial combat integration
+    
+    Args:
+        game_controller: The game controller instance to patch
+    """
+    # 1. Modify _setup_battle_systems method to use the new spatial systems
+    original_setup = game_controller._setup_battle_systems
+    
+    def _setup_spatial_battle_systems(self):
+        """Set up battle-related systems with spatial combat"""
+        # Get screen dimensions
+        screen_width, screen_height = self.screen.get_width(), self.screen.get_height()
+        
+        # Add integration methods to battle manager
+        add_integration_methods(self.battle_manager)
+        
+        # Initialize all spatial systems
+        if hasattr(self.battle_manager, 'initialize_spatial_combat_systems'):
+            self.battle_manager.initialize_spatial_combat_systems(screen_width, screen_height)
+        else:
+            # Fall back to original setup if integration fails
+            original_setup(self)
+            
+        # Register event handlers
+        from game.events import (
+            register_event_handler, EVENT_COMBAT_MOVE_START, EVENT_COMBAT_MOVE_END,
+            EVENT_COMBAT_STATE_CHANGE
+        )
+        register_event_handler(EVENT_COMBAT_MOVE_START, self._on_movement_start)
+        register_event_handler(EVENT_COMBAT_MOVE_END, self._on_movement_end)
+        register_event_handler(EVENT_COMBAT_STATE_CHANGE, self._on_combat_state_change)
+    
+    # Replace the method
+    game_controller._setup_battle_systems = _setup_spatial_battle_systems.__get__(game_controller, game_controller.__class__)
+    
+    # 2. Modify handle_mouse_event to support spatial combat
+    original_handle_mouse = game_controller.handle_mouse_event
+    
+    def _handle_spatial_mouse_event(self, event):
+        """
+        Handle mouse events with spatial combat support
+        
+        Args:
+            event (pygame.event.Event): The mouse event
+            
+        Returns:
+            bool: True if event was handled
+        """
+        # Handle spatial combat mouse events in battle state
+        if (self.game_state.current_state == "battle" and 
+            hasattr(self.battle_manager, 'handle_mouse_event')):
+            if self.battle_manager.handle_mouse_event(event):
+                return True
+                
+        # Fall back to original handler
+        return original_handle_mouse(event)
+    
+    # Replace the method
+    game_controller.handle_mouse_event = _handle_spatial_mouse_event.__get__(game_controller, game_controller.__class__)
+    
+    # 3. Modify handle_key_event to support spatial combat
+    original_handle_key = game_controller.handle_key_event
+    
+    def _handle_spatial_key_event(self, key):
+        """
+        Handle key events with spatial combat support
+        
+        Args:
+            key (int): The key code from pygame.K_*
+            
+        Returns:
+            bool: True if event was handled
+        """
+        # Handle spatial combat key events in battle state
+        if (self.game_state.current_state == "battle" and 
+            hasattr(self.battle_manager, 'handle_key_event')):
+            if self.battle_manager.handle_key_event(key):
+                return True
+                
+        # Fall back to original handler
+        return original_handle_key(key)
+    
+    # Replace the method
+    game_controller.handle_key_event = _handle_spatial_key_event.__get__(game_controller, game_controller.__class__)
+    
+    # 4. Modify update method to update spatial systems
+    original_update = game_controller.update
+    
+    def _update_with_spatial(self, delta_time):
+        """
+        Update with spatial combat support
+        
+        Args:
+            delta_time (float): Time since last update
+        """
+        # Run original update
+        original_update(delta_time)
+        
+        # Additional updates can be added here if needed
+    
+    # Replace the method
+    game_controller.update = _update_with_spatial.__get__(game_controller, game_controller.__class__)
+    
+    # 5. Modify render method to render spatial systems
+    original_render = game_controller.render
+    
+    def _render_with_spatial(self):
+        """Render with spatial combat support"""
+        # Run original render
+        original_render()
+        
+        # Additional rendering can be added here if needed
+    
+    # Replace the method
+    game_controller.render = _render_with_spatial.__get__(game_controller, game_controller.__class__)
+    
+    # 6. Add a method to start a spatial combat encounter
+    def _start_spatial_battle(self):
+        """Start a battle with spatial combat"""
+        # Ensure we have at least one character
+        if not any(self.game_state.party):
+            print("Need at least one character in party to start battle")
+            return
+            
+        # Reset game state for a new battle
+        self.game_state.enemies = []
+        self.game_state.battle_timer = 0
+        self.game_state.battle_round = 0
+        self.game_state.battle_paused = False
+        
+        # Reset enemy spawner
+        self.enemy_spawner.reset_for_new_battle()
+        
+        # Set active character to first living character
+        for i, char in enumerate(self.game_state.party):
+            if char and char.is_alive():
+                self.game_state.active_character_index = i
+                break
+        
+        # Start the battle
+        self.game_state.change_state("battle")
+        
+        # Setup battle systems (including spatial combat)
+        self._setup_battle_systems()
+        
+        # Spawn initial enemies
+        num_enemies = self._determine_enemy_count()
+        self.enemy_spawner.spawn_enemy_group(num_enemies)
+        
+        # Start the real-time battle manager
+        self.battle_manager.start_battle()
+        
+        # Activate the tactical UI
+        if hasattr(self.battle_manager, 'tactical_ui'):
+            self.battle_manager.tactical_ui.activate()
+        
+        if self.debug:
+            print(f"Started spatial battle with {num_enemies} enemies")
+    
+    # Add the method
+    game_controller._start_spatial_battle = _start_spatial_battle.__get__(game_controller, game_controller.__class__)
+    
+    # 7. Modify _start_battle to use spatial combat
+    game_controller._start_battle = game_controller._start_spatial_battle
+    
+    # Return the patched controller
+    return game_controller
 
 class GameController:
     """
@@ -101,6 +272,10 @@ class GameController:
             # Update real-time battle manager
             self.battle_manager.update(delta_time)
             
+            # Update spatial combat systems
+            if hasattr(self.battle_manager, '_update_spatial_combat_systems'):
+                self.battle_manager._update_spatial_combat_systems(delta_time)
+            
             # Update enemy spawner
             self.enemy_spawner.update(delta_time)
             
@@ -135,9 +310,14 @@ class GameController:
                 enemy.update(delta_time)
 
     def render(self):
-        """Render the current game state"""
+        """Render the current game state with optional debug visualizations"""
         # Let the UI manager handle all rendering
         self.ui_manager.render(self.screen)
+        
+        # Render spatial combat systems debug visualization if enabled
+        if self.game_state.current_state == STATE_BATTLE:
+            if hasattr(self.battle_manager, '_render_spatial_combat_systems'):
+                self.battle_manager._render_spatial_combat_systems(self.screen)
         
         # If typing character name, render input box
         if self.typing_character_name:
@@ -146,17 +326,130 @@ class GameController:
         # If character creation dialog is active, render it
         if self.character_creation_dialog.active:
             self.character_creation_dialog.render(self.screen)
+        
+        # Render control help when debug visualization is enabled
+        if (self.game_state.current_state == STATE_BATTLE and 
+            hasattr(self.battle_manager, 'movement_controller') and 
+            self.battle_manager.movement_controller.debug_render):
+            
+            self._render_debug_controls_help()
     
     def handle_key_event(self, key):
         """
-        Handle keyboard input
+        Handle keyboard input (update to add debugging controls)
         
         Args:
             key (int): The key code from pygame.K_*
             
         Returns:
-            bool: True if the key was handled, False otherwise
+                bool: True if the key was handled, False otherwise
         """
+        # Check for debug visualization toggle
+        if key == pygame.K_F1 and self.game_state.current_state == STATE_BATTLE:
+            if hasattr(self.battle_manager, 'movement_controller'):
+                self.debug_visualization_enabled = self.battle_manager.movement_controller.toggle_debug_render()
+                print(f"Debug visualization {'enabled' if self.debug_visualization_enabled else 'disabled'}")
+                return True
+        
+        # Formation controls when in battle
+        if self.game_state.current_state == STATE_BATTLE:
+            if hasattr(self.battle_manager, 'formation_system'):
+                formation_system = self.battle_manager.formation_system
+                
+                # Formation selection
+                if key == pygame.K_1 and pygame.key.get_mods() & pygame.KMOD_CTRL:
+                    formation_system.apply_formation(FormationType.LINE)
+                    self._log_message("Party formation changed to LINE")
+                    return True
+                elif key == pygame.K_2 and pygame.key.get_mods() & pygame.KMOD_CTRL:
+                    formation_system.apply_formation(FormationType.TRIANGLE)
+                    self._log_message("Party formation changed to TRIANGLE")
+                    return True
+                elif key == pygame.K_3 and pygame.key.get_mods() & pygame.KMOD_CTRL:
+                    formation_system.apply_formation(FormationType.SPREAD)
+                    self._log_message("Party formation changed to SPREAD")
+                    return True
+                elif key == pygame.K_4 and pygame.key.get_mods() & pygame.KMOD_CTRL:
+                    formation_system.apply_formation(FormationType.CIRCLE)
+                    self._log_message("Party formation changed to CIRCLE")
+                    return True
+                elif key == pygame.K_5 and pygame.key.get_mods() & pygame.KMOD_CTRL:
+                    formation_system.apply_formation(FormationType.FLANK)
+                    self._log_message("Party formation changed to FLANK")
+                    return True
+                elif key == pygame.K_6 and pygame.key.get_mods() & pygame.KMOD_CTRL:
+                    formation_system.apply_formation(FormationType.WEDGE)
+                    self._log_message("Party formation changed to WEDGE")
+                    return True
+                    
+                # Formation rotation
+                elif key == pygame.K_LEFT and pygame.key.get_mods() & pygame.KMOD_CTRL:
+                    formation_system.rotate_formation(-45)
+                    return True
+                elif key == pygame.K_RIGHT and pygame.key.get_mods() & pygame.KMOD_CTRL:
+                    formation_system.rotate_formation(45)
+                    return True
+                    
+                # Formation spacing
+                elif key == pygame.K_UP and pygame.key.get_mods() & pygame.KMOD_CTRL:
+                    formation_system.adjust_spacing(20)
+                    return True
+                elif key == pygame.K_DOWN and pygame.key.get_mods() & pygame.KMOD_CTRL:
+                    formation_system.adjust_spacing(-20)
+                    return True
+        
+        # Cover controls when in battle
+        if self.game_state.current_state == STATE_BATTLE:
+            if hasattr(self.battle_manager, 'cover_system'):
+                cover_system = self.battle_manager.cover_system
+                
+                # Take cover with current character
+                if key == pygame.K_c and pygame.key.get_mods() & pygame.KMOD_SHIFT:
+                    active_char_idx = self.game_state.active_character_index
+                    if (0 <= active_char_idx < len(self.game_state.party) and 
+                        self.game_state.party[active_char_idx] and 
+                        self.game_state.party[active_char_idx].is_alive()):
+                        
+                        character = self.game_state.party[active_char_idx]
+                        if cover_system.take_cover(character):
+                            self._log_message(f"{character.name} takes cover")
+                            return True
+                        else:
+                            self._log_message(f"{character.name} couldn't find cover")
+                            return True
+                
+                # Break cover with current character
+                elif key == pygame.K_b and pygame.key.get_mods() & pygame.KMOD_SHIFT:
+                    active_char_idx = self.game_state.active_character_index
+                    if (0 <= active_char_idx < len(self.game_state.party) and 
+                        self.game_state.party[active_char_idx] and 
+                        self.game_state.party[active_char_idx].is_alive()):
+                        
+                        character = self.game_state.party[active_char_idx]
+                        if cover_system.break_cover(character):
+                            self._log_message(f"{character.name} breaks cover")
+                            return True
+                            
+                # Find and move to nearest cover
+                elif key == pygame.K_f and pygame.key.get_mods() & pygame.KMOD_SHIFT:
+                    active_char_idx = self.game_state.active_character_index
+                    if (0 <= active_char_idx < len(self.game_state.party) and 
+                        self.game_state.party[active_char_idx] and 
+                        self.game_state.party[active_char_idx].is_alive()):
+                        
+                        character = self.game_state.party[active_char_idx]
+                        cover_pos = cover_system.find_nearest_cover(character)
+                        
+                        if cover_pos:
+                            if hasattr(self.battle_manager, 'initiate_movement'):
+                                self.battle_manager.initiate_movement(
+                                    character, cover_pos, 
+                                    lambda char: cover_system.take_cover(char))
+                                self._log_message(f"{character.name} moves to nearest cover")
+                                return True
+                        else:
+                            self._log_message(f"No cover found for {character.name}")
+                            return True
         # Handle character name input if active
         if self.typing_character_name:
             if key == pygame.K_RETURN:
@@ -303,6 +596,13 @@ class GameController:
                 self._continue_to_next_battle()
                 return True
         
+        # Check for debug visualization toggle
+        if key == pygame.K_F1 and self.game_state.current_state == STATE_BATTLE:
+            if hasattr(self.battle_manager, 'movement_controller'):
+                self.debug_visualization_enabled = self.battle_manager.movement_controller.toggle_debug_render()
+                print(f"Debug visualization {'enabled' if self.debug_visualization_enabled else 'disabled'}")
+                return True
+
         # Key was not handled
         return False
     
@@ -683,6 +983,112 @@ class GameController:
                     
             print("Party is full")
     
+    def _setup_battle_systems(self):
+        """Set up battle-related systems"""
+        # Initialize spatial combat systems
+        screen_width, screen_height = self.screen.get_width(), self.screen.get_height()
+        
+        # Add spatial combat systems to battle manager
+        if hasattr(self.battle_manager, 'initialize_spatial_combat_systems'):
+            self.battle_manager.screen_width = screen_width
+            self.battle_manager.screen_height = screen_height
+            self.battle_manager.initialize_spatial_combat_systems(screen_width, screen_height)
+        
+        # Register event handlers for movement and other combat events
+        from game.events import (
+            register_event_handler, EVENT_COMBAT_MOVE_START, EVENT_COMBAT_MOVE_END,
+            EVENT_COMBAT_STATE_CHANGE
+        )
+        register_event_handler(EVENT_COMBAT_MOVE_START, self._on_movement_start)
+        register_event_handler(EVENT_COMBAT_MOVE_END, self._on_movement_end)
+        register_event_handler(EVENT_COMBAT_STATE_CHANGE, self._on_combat_state_change)
+
+    def _on_movement_start(self, entity, target):
+        """
+        Handle movement start event
+        
+        Args:
+            entity (BaseCharacter): The moving entity
+            target: The target position or entity
+        """
+        # Log movement to combat log
+        if hasattr(self.battle_manager, 'combat_log'):
+            target_name = getattr(target, 'name', 'a new position')
+            if hasattr(target, 'x') and hasattr(target, 'y'):
+                self.battle_manager._log_message(f"{entity.name} is moving...")
+            else:
+                self.battle_manager._log_message(f"{entity.name} is moving towards {target_name}...")
+
+    def _on_movement_end(self, entity):
+        """
+        Handle movement end event
+        
+        Args:
+            entity (BaseCharacter): The entity that finished moving
+        """
+        # Could add special effects or status checks here
+        pass
+
+    def _on_combat_state_change(self, entity, old_state, new_state):
+        """
+        Handle combat state change event
+        
+        Args:
+            entity (BaseCharacter): The entity whose state changed
+            old_state (CombatState): The previous combat state
+            new_state (CombatState): The new combat state
+        """
+        # Log state changes for player characters
+        if entity in self.game_state.party:
+            if new_state == CombatState.TAKING_COVER:
+                self._log_message(f"{entity.name} is taking cover")
+            elif old_state == CombatState.TAKING_COVER and new_state == CombatState.IDLE:
+                self._log_message(f"{entity.name} breaks cover")
+
+    def _log_message(self, message):
+        """
+        Add a message to the combat log
+        
+        Args:
+            message (str): The message to log
+        """
+        if hasattr(self.battle_manager, 'combat_log'):
+            self.battle_manager.combat_log.add_entry(message)
+        else:
+            print(f"[COMBAT] {message}")
+
+    def _render_debug_controls_help(self):
+        """Render help text for debug controls"""
+        # Only show when debug visualization is enabled
+        if not hasattr(self, 'debug_visualization_enabled') or not self.debug_visualization_enabled:
+            return
+            
+        # Create a semi-transparent overlay
+        help_surface = pygame.Surface((300, 250), pygame.SRCALPHA)
+        help_surface.fill((0, 0, 0, 180))
+        
+        # Render help text
+        font = pygame.font.SysFont("Arial", 14)
+        help_texts = [
+            "Debug Controls:",
+            "CTRL+1-6: Change formation",
+            "CTRL+Arrows: Rotate/resize formation",
+            "SHIFT+C: Take cover",
+            "SHIFT+B: Break cover",
+            "SHIFT+F: Find nearest cover",
+            "F1: Toggle debug visualization",
+            "TAB: Cycle active character"
+        ]
+        
+        y_offset = 10
+        for text in help_texts:
+            text_surface = font.render(text, True, (255, 255, 255))
+            help_surface.blit(text_surface, (10, y_offset))
+            y_offset += 20
+        
+        # Position in top-right corner
+        self.screen.blit(help_surface, (self.screen.get_width() - 310, 10))
+
     def _start_battle(self):
         """Start a battle with the current party using real-time battle system"""
         # Ensure we have at least one character
@@ -708,8 +1114,8 @@ class GameController:
         # Start the battle
         self.game_state.change_state(STATE_BATTLE)
         
-        # Initialize combat positions
-        self._initialize_combat_positions()
+        # Setup battle systems (including spatial combat)
+        self._setup_battle_systems()
         
         # Spawn initial enemies
         num_enemies = self._determine_enemy_count()
@@ -720,6 +1126,9 @@ class GameController:
         
         if self.debug:
             print(f"Started real-time battle with {num_enemies} enemies")
+            
+        # Toggle debug visualization with F1 key
+        self.debug_visualization_enabled = False
 
     def _initialize_combat_positions(self):
         """

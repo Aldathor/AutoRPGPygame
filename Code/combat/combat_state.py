@@ -7,14 +7,20 @@ from enum import Enum, auto
 
 class CombatState(Enum):
     """Combat states for characters and enemies"""
-    IDLE = auto()
-    WIND_UP = auto()
-    ATTACK = auto()
-    RECOVERY = auto()
-    STAGGERED = auto()
-    DODGING = auto()
-    PARRYING = auto()
-    CASTING = auto()
+    IDLE = auto()          # Character is idle and can take actions
+    WIND_UP = auto()       # Character is winding up for an attack
+    ATTACK = auto()        # Character is executing attack
+    RECOVERY = auto()      # Character is recovering from an attack
+    STAGGERED = auto()     # Character is staggered (interrupted)
+    DODGING = auto()       # Character is dodging
+    PARRYING = auto()      # Character is parrying
+    CASTING = auto()       # Character is casting a spell
+    MOVING = auto()        # Character is moving to a new position
+    KNOCKED_BACK = auto()  # Character is being knocked back
+    STUNNED = auto()       # Character is stunned and cannot act
+    CHARGING = auto()      # Character is charging an ability
+    TAKING_COVER = auto()  # Character is taking cover
+    FLANKING = auto()      # Character is flanking target
 
 class CombatEvent:
     """
@@ -158,3 +164,48 @@ class AttackPhase:
         elif elapsed_time < self.total_time:
             return CombatState.RECOVERY
         return CombatState.IDLE
+
+class MovementPhase:
+    """
+    Represents movement phases with timing information
+    """
+    def __init__(self, start_time=0.2, move_time=None, end_time=0.2):
+        """
+        Initialize movement phase timing
+        
+        Args:
+            start_time (float): Duration of start phase in seconds
+            move_time (float, optional): Duration of movement phase or None for variable
+            end_time (float): Duration of end phase in seconds
+        """
+        self.start_time = start_time
+        self.move_time = move_time
+        self.end_time = end_time
+        self.total_time = (start_time + (move_time or 0) + end_time)
+    
+    def get_phase_progress(self, elapsed_time, total_distance=None, current_distance=None):
+        """
+        Get the progress of the movement phase
+        
+        Args:
+            elapsed_time (float): Time since movement started
+            total_distance (float, optional): Total movement distance
+            current_distance (float, optional): Current distance traveled
+            
+        Returns:
+            float: Movement progress from 0.0 to 1.0
+        """
+        # If we have distance information, use that for variable move time
+        if self.move_time is None and total_distance is not None and current_distance is not None:
+            # Calculate progress based on distance
+            return min(1.0, current_distance / total_distance)
+        
+        # Otherwise use time-based progress
+        if elapsed_time < self.start_time:
+            return 0.0
+        elif self.move_time is not None and elapsed_time < self.start_time + self.move_time:
+            # Linear progress during movement phase
+            move_progress = (elapsed_time - self.start_time) / self.move_time
+            return move_progress
+        else:
+            return 1.0

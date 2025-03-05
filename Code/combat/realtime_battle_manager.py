@@ -3,8 +3,325 @@ Real-time Battle Manager - Handles real-time combat flow and character interacti
 """
 import time
 import pygame
-from combat.combat_state import CombatState, CombatEventQueue
+from combat.movement_controller import MovementController
+from combat.movement_controller import MovementController
+from combat.tactical_ai import TacticalAI
+from combat.formation_system import FormationSystem, FormationType
+from combat.cover_system import CoverSystem, CoverType
+from combat.area_effect_system import AoEManager
+from combat.tactical_ui import TacticalUIController
+from combat.combat_modifiers import ModifierManager
+from combat.combat_state import CombatState
+from game.events import (
+    trigger_event, EVENT_COMBAT_MOVE_START, EVENT_COMBAT_MOVE_END,
+    EVENT_COMBAT_STATE_CHANGE
+)
+
 from combat.combat_calculator import CombatCalculator
+
+class BattleSystemsIntegration:
+    """
+    Integration class for all spatial combat systems in RealtimeBattleManager
+    """
+    
+    def init_systems(battle_manager, screen_width, screen_height):
+        """
+        Initialize all spatial combat systems
+        
+        Args:
+            battle_manager: The battle manager instance
+            screen_width (int): Width of the screen
+            screen_height (int): Height of the screen
+        """
+        # Set screen dimensions
+        battle_manager.screen_width = screen_width
+        battle_manager.screen_height = screen_height
+        
+        # Initialize systems in order of dependency
+        # 1. Movement controller and combat grid
+        from combat.movement_controller import MovementController
+        battle_manager.movement_controller = MovementController(screen_width, screen_height)
+        
+        # 2. Modifier manager (before tactical systems that use modifiers)
+        from combat.combat_modifiers import ModifierManager
+        battle_manager.modifier_manager = ModifierManager()
+        
+        # 3. Tactical AI
+        from combat.tactical_ai import TacticalAI
+        battle_manager.tactical_ai = TacticalAI(battle_manager)
+        
+        # 4. Formation system
+        from combat.formation_system import FormationSystem, FormationType
+        battle_manager.formation_system = FormationSystem(battle_manager)
+        
+        # 5. Cover system
+        from combat.cover_system import CoverSystem
+        battle_manager.cover_system = CoverSystem(battle_manager)
+        battle_manager.cover_system.generate_random_cover(5)  # Add some random cover
+        
+        # 6. Area effect system
+        from combat.area_effect_system import AoEManager
+        battle_manager.aoe_manager = AoEManager(battle_manager)
+        
+        # 7. Tactical UI controller (depends on all other systems)
+        from combat.tactical_ui import TacticalUIController
+        battle_manager.tactical_ui = TacticalUIController(battle_manager)
+        
+        # Initialize positions after all systems are ready
+        battle_manager._initialize_spatial_combat()
+        
+        # Log initialization
+        if hasattr(battle_manager, '_log_message'):
+            battle_manager._log_message("Tactical combat systems initialized")
+    
+    def _initialize_spatial_combat(battle_manager):
+        """Initialize spatial positioning for all entities"""
+        # Register entities with movement controller
+        if not hasattr(battle_manager, 'movement_controller'):
+            return
+            
+        # Position party members on the left side
+        party_center_x = battle_manager.screen_width // 4
+        party_center_y = battle_manager.screen_height // 2
+        
+        # Set initial formation center
+        if hasattr(battle_manager, 'formation_system'):
+            battle_manager.formation_system.formation_center = pygame.Vector2(party_center_x, party_center_y)
+            
+            # Apply initial formation
+            from combat.formation_system import FormationType
+            battle_manager.formation_system.apply_formation(FormationType.TRIANGLE)
+        else:
+            # Fallback if no formation system
+            character_spacing = 150
+            
+            for i, character in enumerate(battle_manager.game_state.party):
+                if character and character.is_alive():
+                    # Calculate vertical position
+                    char_y = party_center_y + (i - 1) * character_spacing
+                    
+                    # Register with movement controller
+                    battle_manager.movement_controller.register_entity(character, 
+                                                                    (party_center_x, char_y))
+        
+        # Position enemies on the right side
+        enemy_center_x = (battle_manager.screen_width * 3) // 4
+        enemy_center_y = battle_manager.screen_height // 2
+        enemy_spacing = 120
+        
+        for i, enemy in enumerate(battle_manager.game_state.enemies):
+            if enemy.is_alive():
+                # Calculate position based on number of enemies
+                if len(battle_manager.game_state.enemies) <= 3:
+                    enemy_y = enemy_center_y + (i - (len(battle_manager.game_state.enemies) - 1) / 2) * enemy_spacing
+                    enemy_x = enemy_center_x
+                else:
+                    # Grid layout for more than 3 enemies
+                    col = i % 2
+                    row = i // 2
+                    enemy_x = enemy_center_x + (col - 0.5) * enemy_spacing
+                    enemy_y = enemy_center_y + (row - len(battle_manager.game_state.enemies) // 4) * enemy_spacing
+                
+                # Register with movement controller
+                battle_manager.movement_controller.register_entity(enemy, (enemy_x, enemy_y))
+    
+    def start_battle(battle_manager):
+        """Start the battle with all spatial systems"""
+        # Initialize event queue
+        battle_manager.event_queue.clear()
+        
+        # Activate tactical UI
+        if hasattr(battle_manager, 'tactical_ui'):
+            battle_manager.tactical_ui.activate()
+        
+        # Schedule initial AI update
+        battle_manager.event_queue.schedule(0.1, 10, battle_manager._update_enemy_ai)
+        
+        # Log battle start
+        if hasattr(battle_manager, '_log_message'):
+            battle_manager._log_message("Tactical battle started!")
+    
+    def update_all_systems(battle_manager, delta_time):
+        """
+        Update all spatial combat systems
+        
+        Args:
+            battle_manager: The battle manager instance
+            delta_time (float): Time since last update
+        """
+        # Update core movement system
+        if hasattr(battle_manager, 'movement_controller'):
+            battle_manager.movement_controller.update(delta_time)
+        
+        # Update modifier manager
+        if hasattr(battle_manager, 'modifier_manager'):
+            battle_manager.modifier_manager.update(delta_time)
+        
+        # Update tactical AI
+        if hasattr(battle_manager, 'tactical_ai'):
+            battle_manager.tactical_ai.update(delta_time)
+        
+        # Update formation system
+        if hasattr(battle_manager, 'formation_system'):
+            battle_manager.formation_system.update(delta_time)
+        
+        # Update cover system
+        if hasattr(battle_manager, 'cover_system'):
+            battle_manager.cover_system.update(delta_time)
+        
+        # Update area effect system
+        if hasattr(battle_manager, 'aoe_manager'):
+            battle_manager.aoe_manager.update(delta_time)
+        
+        # Update tactical UI (last, depends on all others)
+        if hasattr(battle_manager, 'tactical_ui'):
+            battle_manager.tactical_ui.update(delta_time)
+    
+    def render_all_systems(battle_manager, screen):
+        """
+        Render all spatial combat systems
+        
+        Args:
+            battle_manager: The battle manager instance
+            screen (pygame.Surface): The screen to render to
+        """
+        # Only render if debug mode is on or tactical UI is active
+        debug_mode = False
+        if hasattr(battle_manager, 'movement_controller'):
+            debug_mode = battle_manager.movement_controller.debug_render
+        
+        tactical_ui_active = False
+        if hasattr(battle_manager, 'tactical_ui'):
+            tactical_ui_active = battle_manager.tactical_ui.active
+        
+        if debug_mode or tactical_ui_active:
+            # Render in order of layering (background to foreground)
+            
+            # 1. Movement system (if debug mode)
+            if debug_mode and hasattr(battle_manager, 'movement_controller'):
+                battle_manager.movement_controller.render(screen)
+            
+            # 2. Formation system (if debug mode)
+            if debug_mode and hasattr(battle_manager, 'formation_system'):
+                battle_manager.formation_system.render(screen)
+            
+            # 3. Cover system (if debug mode)
+            if debug_mode and hasattr(battle_manager, 'cover_system'):
+                battle_manager.cover_system.render(screen)
+            
+            # 4. Area effect system (always show effects)
+            if hasattr(battle_manager, 'aoe_manager'):
+                battle_manager.aoe_manager.render(screen)
+            
+            # 5. Tactical UI (always render if active)
+            if tactical_ui_active and hasattr(battle_manager, 'tactical_ui'):
+                battle_manager.tactical_ui.render(screen)
+    
+    def handle_mouse_event(battle_manager, event):
+        """
+        Handle mouse events for spatial combat systems
+        
+        Args:
+            battle_manager: The battle manager instance
+            event (pygame.event.Event): The mouse event
+            
+        Returns:
+            bool: True if event was handled
+        """
+        # Forward to tactical UI if active
+        if hasattr(battle_manager, 'tactical_ui') and battle_manager.tactical_ui.active:
+            return battle_manager.tactical_ui.handle_mouse_event(event)
+            
+        return False
+    
+    def handle_key_event(battle_manager, key):
+        """
+        Handle key events for spatial combat systems
+        
+        Args:
+            battle_manager: The battle manager instance
+            key (int): The key code from pygame.K_*
+            
+        Returns:
+            bool: True if event was handled
+        """
+        # Toggle tactical UI with T key
+        if key == pygame.K_t:
+            if hasattr(battle_manager, 'tactical_ui'):
+                active = battle_manager.tactical_ui.toggle()
+                
+                # Log toggle
+                if hasattr(battle_manager, '_log_message'):
+                    if active:
+                        battle_manager._log_message("Tactical UI activated")
+                    else:
+                        battle_manager._log_message("Tactical UI deactivated")
+                        
+                return True
+                
+        # Toggle debug visualization with F1 key
+        elif key == pygame.K_F1:
+            if hasattr(battle_manager, 'movement_controller'):
+                debug_mode = battle_manager.movement_controller.toggle_debug_render()
+                
+                # Sync all systems
+                if hasattr(battle_manager, 'cover_system'):
+                    battle_manager.cover_system.debug_render = debug_mode
+                    
+                if hasattr(battle_manager, 'formation_system'):
+                    battle_manager.formation_system.debug_render = debug_mode
+                
+                # Log toggle
+                if hasattr(battle_manager, '_log_message'):
+                    if debug_mode:
+                        battle_manager._log_message("Debug visualization enabled")
+                    else:
+                        battle_manager._log_message("Debug visualization disabled")
+                        
+                return True
+                
+        # If tactical UI is active, let it handle key events first
+        if hasattr(battle_manager, 'tactical_ui') and battle_manager.tactical_ui.active:
+            # Tactical UI key handling could be added here
+            pass
+            
+        return False
+    
+    def position_entity(battle_manager, entity, position):
+        """
+        Position an entity at a specific location
+        
+        Args:
+            battle_manager: The battle manager instance
+            entity: The entity to position
+            position (tuple): The (x, y) position
+            
+        Returns:
+            bool: True if successful
+        """
+        if hasattr(battle_manager, 'movement_controller'):
+            return battle_manager.movement_controller.register_entity(entity, position)
+            
+        return False
+    
+    def clean_up(battle_manager):
+        """Clean up all spatial combat systems"""
+        # Clear active effects
+        if hasattr(battle_manager, 'aoe_manager'):
+            battle_manager.aoe_manager.clear_effects()
+        
+        # Deactivate tactical UI
+        if hasattr(battle_manager, 'tactical_ui'):
+            battle_manager.tactical_ui.deactivate()
+        
+        # Clear modifiers
+        if hasattr(battle_manager, 'modifier_manager'):
+            for character in battle_manager.game_state.party:
+                if character:
+                    battle_manager.modifier_manager.clear_modifiers(character)
+            
+            for enemy in battle_manager.game_state.enemies:
+                battle_manager.modifier_manager.clear_modifiers(enemy)
 
 class RealtimeBattleManager:
     """
@@ -39,6 +356,40 @@ class RealtimeBattleManager:
         self.ai_update_interval = 0.5  # seconds
         self.last_ai_update = 0
     
+    # Add integration methods to RealtimeBattleManager
+    def add_integration_methods(battle_manager):
+        """
+        Add spatial combat integration methods to a battle manager instance
+        
+        Args:
+            battle_manager: The battle manager instance to modify
+        """
+        # Add initialization method
+        battle_manager.initialize_spatial_combat_systems = lambda width, height: BattleSystemsIntegration.init_systems(battle_manager, width, height)
+        
+        # Add internal initialization
+        battle_manager._initialize_spatial_combat = lambda: BattleSystemsIntegration._initialize_spatial_combat(battle_manager)
+        
+        # Add start battle method (using original but adding spatial systems)
+        original_start_battle = battle_manager.start_battle
+        battle_manager.start_battle = lambda: (original_start_battle(), BattleSystemsIntegration.start_battle(battle_manager))
+        
+        # Add update method
+        battle_manager._update_spatial_combat_systems = lambda delta_time: BattleSystemsIntegration.update_all_systems(battle_manager, delta_time)
+        
+        # Add render method
+        battle_manager._render_spatial_combat_systems = lambda screen: BattleSystemsIntegration.render_all_systems(battle_manager, screen)
+        
+        # Add event handling methods
+        battle_manager.handle_mouse_event = lambda event: BattleSystemsIntegration.handle_mouse_event(battle_manager, event)
+        battle_manager.handle_key_event = lambda key: BattleSystemsIntegration.handle_key_event(battle_manager, key)
+        
+        # Add positioning method
+        battle_manager.position_entity = lambda entity, position: BattleSystemsIntegration.position_entity(battle_manager, entity, position)
+        
+        # Add cleanup method
+        battle_manager.clean_up_spatial_systems = lambda: BattleSystemsIntegration.clean_up(battle_manager)
+
     def start_battle(self):
         """Initialize a new battle"""
         self.event_queue.clear()
@@ -135,6 +486,241 @@ class RealtimeBattleManager:
         # Schedule next AI update
         self.event_queue.schedule(self.ai_update_interval, 10, self._update_enemy_ai)
     
+    def initialize_movement_controller(self, screen_width, screen_height):
+        """
+        Initialize the movement controller for spatial combat
+        
+        Args:
+            screen_width (int): Width of the screen in pixels
+            screen_height (int): Height of the screen in pixels
+        """
+        self.movement_controller = MovementController(screen_width, screen_height)
+        
+        # Initialize combat grid with entities
+        self._initialize_combat_positions()
+
+    def initialize_spatial_combat_systems(self, screen_width, screen_height):
+        """
+        Initialize all spatial combat systems
+        
+        Args:
+            screen_width (int): Width of the screen in pixels
+            screen_height (int): Height of the screen in pixels
+        """
+        # Initialize movement controller
+        self.movement_controller = MovementController(screen_width, screen_height)
+        
+        # Initialize tactical AI
+        self.tactical_ai = TacticalAI(self)
+        
+        # Initialize formation system
+        self.formation_system = FormationSystem(self)
+        
+        # Initialize cover system
+        self.cover_system = CoverSystem(self)
+        
+        # Generate random cover objects
+        self.cover_system.generate_random_cover(5)
+        
+        # Initialize combat grid with entities
+        self._initialize_combat_positions()
+        
+        # Set initial formation
+        party_center_x = screen_width // 4
+        party_center_y = screen_height // 2
+        self.formation_system.formation_center = pygame.Vector2(party_center_x, party_center_y)
+        self.formation_system.apply_formation(FormationType.TRIANGLE)
+
+    def initialize_spatial_combat_systems(self, screen_width, screen_height):
+        """
+        Initialize all spatial combat systems
+        
+        Args:
+            screen_width (int): Width of the screen in pixels
+            screen_height (int): Height of the screen in pixels
+        """
+        # Initialize movement controller
+        self.movement_controller = MovementController(screen_width, screen_height)
+        
+        # Initialize tactical AI
+        self.tactical_ai = TacticalAI(self)
+        
+        # Initialize formation system
+        self.formation_system = FormationSystem(self)
+        
+        # Initialize cover system
+        self.cover_system = CoverSystem(self)
+        
+        # Generate random cover objects
+        self.cover_system.generate_random_cover(5)
+        
+        # Initialize combat grid with entities
+        self._initialize_combat_positions()
+        
+        # Set initial formation
+        party_center_x = screen_width // 4
+        party_center_y = screen_height // 2
+        self.formation_system.formation_center = pygame.Vector2(party_center_x, party_center_y)
+        self.formation_system.apply_formation(FormationType.TRIANGLE)
+
+    def initiate_movement(self, entity, target_position, completion_callback=None):
+        """
+        Initiate movement for an entity
+        
+        Args:
+            entity (BaseCharacter): Entity to move
+            target_position (tuple): (x, y) target position
+            completion_callback (function, optional): Function to call when movement completes
+            
+        Returns:
+            bool: True if movement was initiated
+        """
+        # Check if entity can move
+        if not entity.is_alive() or entity.combat_state != CombatState.IDLE:
+            return False
+        
+        # Start movement
+        movement_started = self.movement_controller.start_movement(
+            entity, target_position, entity.movement_speed)
+        
+        if not movement_started:
+            return False
+        
+        # Update entity state
+        entity.combat_state = CombatState.MOVING
+        entity.state_start_time = time.time()
+        
+        # Schedule completion check
+        self.event_queue.schedule(
+            0.1, 10, self._check_movement_completion, entity, completion_callback
+        )
+        
+        # Trigger movement start event
+        trigger_event(EVENT_COMBAT_MOVE_START, entity, target_position)
+        
+        return True
+
+    def move_entity_towards_target(self, entity, target_entity, preferred_distance=None, 
+                                completion_callback=None):
+        """
+        Move an entity towards a target entity
+        
+        Args:
+            entity (BaseCharacter): Entity to move
+            target_entity (BaseCharacter): Target to move towards
+            preferred_distance (float, optional): Preferred distance to maintain
+            completion_callback (function, optional): Function to call when movement completes
+            
+        Returns:
+            bool: True if movement was initiated
+        """
+        # Check if entity can move
+        if not entity.is_alive() or entity.combat_state != CombatState.IDLE:
+            return False
+        
+        # Start movement
+        movement_started = self.movement_controller.move_towards_entity(
+            entity, target_entity, preferred_distance, entity.movement_speed)
+        
+        if not movement_started:
+            return False
+        
+        # Update entity state
+        entity.combat_state = CombatState.MOVING
+        entity.state_start_time = time.time()
+        
+        # Schedule completion check
+        self.event_queue.schedule(
+            0.1, 10, self._check_movement_completion, entity, completion_callback
+        )
+        
+        # Trigger movement start event
+        trigger_event(EVENT_COMBAT_MOVE_START, entity, target_entity)
+        
+        return True
+
+    def _check_movement_completion(self, entity, completion_callback=None):
+        """
+        Check if entity's movement is complete and handle completion
+        
+        Args:
+            entity (BaseCharacter): Entity to check
+            completion_callback (function, optional): Function to call when movement completes
+        """
+        if not entity.is_alive():
+            self.movement_controller.stop_movement(entity)
+            return
+        
+        # Check if movement is complete
+        if self.movement_controller.is_entity_at_target(entity):
+            # Movement complete
+            self.movement_controller.stop_movement(entity)
+            
+            # Update entity state
+            old_state = entity.combat_state
+            entity.combat_state = CombatState.IDLE
+            entity.state_start_time = time.time()
+            
+            # Trigger movement end event
+            trigger_event(EVENT_COMBAT_MOVE_END, entity)
+            
+            # Trigger state change event
+            trigger_event(EVENT_COMBAT_STATE_CHANGE, entity, old_state, CombatState.IDLE)
+            
+            # Call completion callback if provided
+            if completion_callback:
+                completion_callback(entity)
+        else:
+            # Movement still in progress, check again later
+            self.event_queue.schedule(
+                0.1, 10, self._check_movement_completion, entity, completion_callback
+            )
+
+    def _update_spatial_combat_systems(self, delta_time):
+        """Update all spatial combat systems"""
+        # Update movement controller
+        if hasattr(self, 'movement_controller'):
+            self.movement_controller.update(delta_time)
+        
+        # Update tactical AI
+        if hasattr(self, 'tactical_ai'):
+            self.tactical_ai.update(delta_time)
+        
+        # Update formation system
+        if hasattr(self, 'formation_system'):
+            self.formation_system.update(delta_time)
+        
+        # Update cover system
+        if hasattr(self, 'cover_system'):
+            self.cover_system.update(delta_time)
+
+    def _render_spatial_combat_systems(self, screen):
+        """Render spatial combat debug visualizations"""
+        # Only render if debug mode is on
+        if not hasattr(self, 'movement_controller') or not self.movement_controller.debug_render:
+            return
+        
+        # Render movement system
+        self.movement_controller.render(screen)
+        
+        # Render formation system
+        if hasattr(self, 'formation_system'):
+            self.formation_system.render(screen)
+        
+        # Render cover system
+        if hasattr(self, 'cover_system'):
+            self.cover_system.render(screen)
+
+    def _update_movement_system(self, delta_time):
+        """Update the movement controller"""
+        if hasattr(self, 'movement_controller'):
+            self.movement_controller.update(delta_time)
+
+    def _render_movement_system(self, screen):
+        """Render movement debug visualization"""
+        if hasattr(self, 'movement_controller') and self.movement_controller.debug_render:
+            self.movement_controller.render(screen)
+
     def _process_enemy_attack(self, enemy, target):
         """
         Process an enemy's attack when wind-up completes

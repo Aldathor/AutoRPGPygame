@@ -89,6 +89,278 @@ class BaseCharacter(ABC):
         
         return AttackPhase(wind_up_time, attack_time, recovery_time)
     
+    def move_to(self, target_position, battle_manager=None):
+        """
+        Begin moving to a target position using the battle manager
+        
+        Args:
+            target_position (tuple or pygame.Vector2): Target position to move to
+            battle_manager: Reference to battle manager (optional)
+            
+        Returns:
+            bool: True if movement was initiated
+        """
+        # Only idle characters can start moving
+        if self.combat_state != CombatState.IDLE:
+            return False
+        
+        # Convert to tuple if needed
+        if hasattr(target_position, 'x') and hasattr(target_position, 'y'):
+            target_position = (target_position.x, target_position.y)
+        
+        # Use battle manager if provided
+        if battle_manager and hasattr(battle_manager, 'initiate_movement'):
+            return battle_manager.initiate_movement(self, target_position)
+        
+        # Legacy movement (without battle manager)
+        self.target_position = pygame.Vector2(target_position)
+        self.is_moving = True
+        self.combat_state = CombatState.MOVING
+        self.state_start_time = time.time()
+        return True
+
+    def move_towards_target(self, target, preferred_distance=None, battle_manager=None):
+        """
+        Move towards a target character
+        
+        Args:
+            target (BaseCharacter): Target character to move towards
+            preferred_distance (float, optional): Preferred distance to maintain
+            battle_manager: Reference to battle manager (optional)
+            
+        Returns:
+            bool: True if movement was initiated
+        """
+        if not target or not target.is_alive():
+            return False
+        
+        # Only idle characters can start moving
+        if self.combat_state != CombatState.IDLE:
+            return False
+        
+        # If preferred distance not specified, use attack range
+        if preferred_distance is None:
+            preferred_distance = self.attack_range * 0.8
+        
+        # Use battle manager if provided
+        if battle_manager and hasattr(battle_manager, 'move_entity_towards_target'):
+            return battle_manager.move_entity_towards_target(
+                self, target, preferred_distance)
+        
+        # Legacy movement (without battle manager)
+        if not hasattr(target, 'position'):
+            return False
+        
+        # Calculate direction to target
+        direction = pygame.Vector2(target.position) - self.position
+        distance = direction.length()
+        
+        # If we're already at preferred distance, don't move
+        if abs(distance - preferred_distance) < 10:
+            self.is_moving = False
+            return False
+        
+        # Calculate target position
+        if distance > 0:
+            direction.normalize_ip()
+            if distance > preferred_distance:
+                # Move closer
+                target_pos = self.position + direction * (distance - preferred_distance)
+            else:
+                # Move away
+                target_pos = self.position - direction * (preferred_distance - distance)
+            
+            return self.move_to(target_pos)
+        
+        return False
+
+    def stop_movement(self, battle_manager=None):
+        """
+        Stop the character's movement
+        
+        Args:
+            battle_manager: Reference to battle manager (optional)
+            
+        Returns:
+            bool: True if was moving and is now stopped
+        """
+        was_moving = self.is_moving or self.combat_state == CombatState.MOVING
+        
+        # Use battle manager if provided
+        if battle_manager and hasattr(battle_manager, 'movement_controller'):
+            if battle_manager.movement_controller.is_entity_moving(self):
+                battle_manager.movement_controller.stop_movement(self)
+        
+        # Reset movement state
+        self.is_moving = False
+        self.target_position = None
+        
+        # Update combat state if currently moving
+        if self.combat_state == CombatState.MOVING:
+            self.combat_state = CombatState.IDLE
+            self.state_start_time = time.time()
+        
+        return was_moving
+
+    def is_in_range(self, target, battle_manager=None):
+        """
+        Check if target is within attack range
+        
+        Args:
+            target (BaseCharacter): Target to check
+            battle_manager: Reference to battle manager (optional)
+            
+        Returns:
+            bool: True if in range
+        """
+        if not target:
+            return False
+        
+        # Use battle manager if provided (for grid-based distance)
+        if battle_manager and hasattr(battle_manager, 'movement_controller'):
+            grid = battle_manager.movement_controller.combat_grid
+            if self in grid.entity_positions and target in grid.entity_positions:
+                # Convert attack range to grid distance
+                grid_range = max(1, int(self.attack_range / grid.cell_size))
+                
+                # Check if within grid range
+                pos1 = grid.entity_positions[self]
+                pos2 = grid.entity_positions[target]
+                grid_distance = abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
+                
+                return grid_distance <= grid_range
+        
+        # Legacy range check (direct distance)
+        if not hasattr(target, 'position'):
+            return False
+            
+        # Calculate distance between characters
+        direction = target.position - self.position
+        distance = direction.length()
+        
+        # Compare with attack range
+        return distance <= self.attack_range
+
+    def can_see_target(self, target, battle_manager=None):
+        """
+        Check if there is line of sight to target
+        
+        Args:
+            target (BaseCharacter): Target to check
+            battle_manager: Reference to battle manager (optional)
+            
+        Returns:
+            bool: True if target is visible
+        """
+        if not target or not target.is_alive():
+            return False
+        
+        # Use battle manager if provided (for grid-based line of sight)
+        if battle_manager and hasattr(battle_manager, 'movement_controller'):
+            grid = battle_manager.movement_controller.combat_grid
+            
+            # Convert positions to grid coordinates
+            if self not in grid.entity_positions or target not in grid.entity_positions:
+                return False
+                
+            start_cell = grid.entity_positions[self]
+            end_cell = grid.entity_positions[target]
+            
+            # Simple line of sight check using Bresenham's line algorithm
+            return self._has_line_of_sight(grid, start_cell, end_cell)
+        
+        # Without grid, assume line of sight if in range
+        return self.is_in_range(target)
+
+    def _has_line_of_sight(self, grid, start_cell, end_cell):
+        """
+        Check if there is line of sight between two grid cells
+        
+        Args:
+            grid (CombatGrid): The combat grid
+            start_cell (tuple): (row, col) starting coordinates
+            end_cell (tuple): (row, col) ending coordinates
+            
+        Returns:
+            bool: True if there is line of sight
+        """
+        # Bresenham's line algorithm for line of sight check
+        x0, y0 = start_cell[1], start_cell[0]  # Convert row,col to x,y
+        x1, y1 = end_cell[1], end_cell[0]
+        
+        dx = abs(x1 - x0)
+        dy = abs(y1 - y0)
+        sx = 1 if x0 < x1 else -1
+        sy = 1 if y0 < y1 else -1
+        err = dx - dy
+        
+        while x0 != x1 or y0 != y1:
+            # Skip start and end cells
+            if (y0, x0) != start_cell and (y0, x0) != end_cell:
+                # Check if cell blocks line of sight
+                cell_type = grid.get_cell_type((y0, x0))
+                if cell_type == grid.CellType.OBSTACLE:
+                    return False
+            
+            e2 = 2 * err
+            if e2 > -dy:
+                err -= dy
+                x0 += sx
+            if e2 < dx:
+                err += dx
+                y0 += sy
+        
+        return True
+
+    def update(self, delta_time):
+        """
+        Update character state
+        
+        Args:
+            delta_time (float): Time since last update in seconds
+        """
+        # Original update logic (cooldowns, state transitions, etc.)
+        if self.attack_cooldown > 0:
+            self.attack_cooldown = max(0, self.attack_cooldown - delta_time)
+        
+        # Check elapsed time since state change
+        current_time = time.time()
+        state_elapsed_time = current_time - self.state_start_time
+        
+        # Handle state transitions based on timing
+        if self.combat_state == CombatState.WIND_UP:
+            if state_elapsed_time >= self.attack_phase.wind_up_time:
+                # Transition to attack phase
+                self.combat_state = CombatState.ATTACK
+                self.state_start_time = current_time
+        
+        elif self.combat_state == CombatState.ATTACK:
+            if state_elapsed_time >= self.attack_phase.attack_time:
+                # Transition to recovery phase
+                self.combat_state = CombatState.RECOVERY
+                self.state_start_time = current_time
+        
+        elif self.combat_state == CombatState.RECOVERY:
+            if state_elapsed_time >= self.attack_phase.recovery_time:
+                # Return to idle state
+                self.combat_state = CombatState.IDLE
+                self.current_target = None
+        
+        elif self.combat_state == CombatState.STAGGERED:
+            # Staggered state lasts a fixed time (0.5 seconds)
+            if state_elapsed_time >= 0.5:
+                self.combat_state = CombatState.IDLE
+        
+        elif self.combat_state == CombatState.KNOCKED_BACK:
+            # Knocked back state lasts a fixed time (0.5 seconds)
+            if state_elapsed_time >= 0.5:
+                self.combat_state = CombatState.IDLE
+        
+        elif self.combat_state == CombatState.STUNNED:
+            # Stunned state lasts a fixed time (2.0 seconds)
+            if state_elapsed_time >= 2.0:
+                self.combat_state = CombatState.IDLE
+
     @abstractmethod
     def attack_target(self, target):
         """
