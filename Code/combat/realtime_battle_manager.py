@@ -4,7 +4,6 @@ Real-time Battle Manager - Handles real-time combat flow and character interacti
 import time
 import pygame
 from combat.movement_controller import MovementController
-from combat.movement_controller import MovementController
 from combat.tactical_ai import TacticalAI
 from combat.formation_system import FormationSystem, FormationType
 from combat.cover_system import CoverSystem, CoverType

@@ -1,7 +1,6 @@
 """
 Combat module - Battle system and mechanics
 """
-from combat.battle_manager import BattleManager
 from combat.enemy_spawner import EnemySpawner
 from combat.combat_calculator import CombatCalculator
 from combat.combat_state import CombatState, CombatEventQueue, AttackPhase, MovementPhase
@@ -10,8 +9,16 @@ from combat.combat_grid import CombatGrid, CellType
 from combat.pathfinding import AStar
 from combat.movement_controller import MovementController
 
+# Tactical combat systems
+from combat.tactical_ai import TacticalAI
+from combat.formation_system import FormationType, FormationSystem
+from combat.cover_system import CoverType, CoverSystem
+from combat.area_effect_system import AoEShape, AoEEffect, AoEManager
+from combat.tactical_ui import TacticalUIController
+from combat.combat_modifiers import ModifierManager, CombatModifier, CombatModifierType, CombatModifierSource
+
 __all__ = [
-    'BattleManager', 
+    # Core combat
     'RealtimeBattleManager',
     'EnemySpawner', 
     'CombatCalculator',
@@ -19,8 +26,25 @@ __all__ = [
     'CombatEventQueue',
     'AttackPhase',
     'MovementPhase',
+    
+    # Spatial combat
     'CombatGrid',
     'CellType',
     'AStar',
-    'MovementController'
+    'MovementController',
+    
+    # Tactical combat
+    'TacticalAI',
+    'FormationType',
+    'FormationSystem',
+    'CoverType', 
+    'CoverSystem',
+    'AoEShape',
+    'AoEEffect',
+    'AoEManager',
+    'TacticalUIController',
+    'ModifierManager',
+    'CombatModifier',
+    'CombatModifierType',
+    'CombatModifierSource'
 ]
