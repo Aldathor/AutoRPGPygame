@@ -4,6 +4,7 @@ Pathfinding - Implements A* pathfinding algorithm for combat movement
 import heapq
 import math
 from collections import defaultdict
+from combat.combat_grid import CellType  # Import CellType directly
 
 class PriorityQueue:
     """A Priority Queue implementation for A* algorithm"""
@@ -66,13 +67,13 @@ class AStar:
         goal = self.grid.get_cell_coords(goal_position)
         
         # If start or goal is invalid, find nearest valid cell
-        if not self.grid.is_valid_cell(start) or self.grid.get_cell_type(start) != self.grid.CellType.EMPTY:
+        if not self.grid.is_valid_cell(start) or self.grid.get_cell_type(start) != CellType.EMPTY:  # Fixed reference
             return None
         
         # If goal is not empty, find nearest empty cell to the goal
         # But skip this check if the goal position has an entity (common for attack moves)
         if (not self.grid.is_valid_cell(goal) or 
-            (self.grid.get_cell_type(goal) != self.grid.CellType.EMPTY and 
+            (self.grid.get_cell_type(goal) != CellType.EMPTY and  # Fixed reference
              self.grid.get_entity_at(goal) is None)):
             return None
         
@@ -122,7 +123,7 @@ class AStar:
                         
                         alt_goal = (goal[0] + d_row, goal[1] + d_col)
                         if (self.grid.is_valid_cell(alt_goal) and 
-                            self.grid.get_cell_type(alt_goal) == self.grid.CellType.EMPTY and
+                            self.grid.get_cell_type(alt_goal) == CellType.EMPTY and  # Fixed reference
                             alt_goal in came_from):
                             # Use this alternative goal
                             goal = alt_goal
@@ -191,7 +192,7 @@ class AStar:
                 
                 cell = (target_coords[0] + d_row, target_coords[1] + d_col)
                 if (self.grid.is_valid_cell(cell) and 
-                    self.grid.get_cell_type(cell) == self.grid.CellType.EMPTY):
+                    self.grid.get_cell_type(cell) == CellType.EMPTY):  # Fixed reference
                     nearby_cells.append(cell)
         
         if not nearby_cells:

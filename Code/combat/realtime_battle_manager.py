@@ -10,7 +10,7 @@ from combat.cover_system import CoverSystem, CoverType
 from combat.area_effect_system import AoEManager
 from combat.tactical_ui import TacticalUIController
 from combat.combat_modifiers import ModifierManager
-from combat.combat_state import CombatState
+from combat.combat_state import CombatState, CombatEventQueue
 from game.events import (
     trigger_event, EVENT_COMBAT_MOVE_START, EVENT_COMBAT_MOVE_END,
     EVENT_COMBAT_STATE_CHANGE
@@ -124,8 +124,15 @@ class BattleSystemsIntegration:
                 # Register with movement controller
                 battle_manager.movement_controller.register_entity(enemy, (enemy_x, enemy_y))
     
-    def start_battle(battle_manager):
-        """Start the battle with all spatial systems"""
+    def start_battle(self):
+        """Initialize a new battle"""
+        self.event_queue.clear()
+        self.battle_time = 0
+        self.animations = []
+        
+        # Add debug logging
+        self._log_message("DEBUG: Battle starting")
+
         # Initialize event queue
         battle_manager.event_queue.clear()
         
@@ -136,6 +143,9 @@ class BattleSystemsIntegration:
         # Schedule initial AI update
         battle_manager.event_queue.schedule(0.1, 10, battle_manager._update_enemy_ai)
         
+        # Log battle start
+        self._log_message("Battle started!")
+
         # Log battle start
         if hasattr(battle_manager, '_log_message'):
             battle_manager._log_message("Tactical battle started!")
@@ -451,40 +461,140 @@ class RealtimeBattleManager:
             self.game_state.change_state("victory")
             return
     
-    def _is_party_alive(self):
-        """Check if any party member is alive"""
-        return any(char and char.is_alive() for char in self.game_state.party)
-    
     def _update_enemy_ai(self):
         """Update AI decisions for all enemies"""
+        # Add debug logging
+        self._log_message(f"DEBUG: Updating enemy AI for {len(self.game_state.enemies)} enemies")
+        
         # Process each enemy's AI
         for enemy in self.game_state.enemies:
-            if enemy.is_alive() and enemy.combat_state == CombatState.IDLE:
-                # Select target from party
-                target = self._select_target_for_enemy(enemy)
+            if not enemy.is_alive():
+                continue
                 
-                if target:
-                    # Check if in range
-                    if not enemy.is_in_range(target):
-                        # Move towards target if not in range
-                        enemy.move_towards_target(target)
+            # Skip entities that are already in a non-idle state
+            # This is the key fix to prevent multiple movement commands
+            if enemy.combat_state != CombatState.IDLE:
+                self._log_message(f"DEBUG: Skipping {enemy.name} in non-idle state: {enemy.combat_state}")
+                continue
+            
+            # Log current state
+            self._log_message(f"DEBUG: {enemy.name} state: {enemy.combat_state}")
+            
+            # Select target from party
+            target = self._select_target_for_enemy(enemy)
+            
+            if target:
+                self._log_message(f"DEBUG: {enemy.name} targeting {target.name}")
+                
+                # Check if in range
+                in_range = enemy.is_in_range(target)
+                self._log_message(f"DEBUG: {enemy.name} in range of {target.name}: {in_range}")
+                
+                if not in_range:
+                    # Move towards target if not in range
+                    self._log_message(f"{enemy.name} moving towards {target.name}")
+                    
+                    # Try using the movement controller if available
+                    if hasattr(self, 'movement_controller'):
+                        current_pos = (enemy.position.x, enemy.position.y)
+                        target_pos = (target.position.x, target.position.y)
+                        
+                        # Calculate direction to target
+                        import math
+                        dx = target_pos[0] - current_pos[0]
+                        dy = target_pos[1] - current_pos[1]
+                        distance = math.hypot(dx, dy)
+                        
+                        # If target is outside attack range, move closer
+                        if distance > enemy.attack_range:
+                            # Calculate position at attack range
+                            if distance > 0:
+                                move_ratio = (distance - enemy.attack_range * 0.8) / distance
+                                move_to_x = current_pos[0] + dx * move_ratio
+                                move_to_y = current_pos[1] + dy * move_ratio
+                                move_to = (move_to_x, move_to_y)
+                                
+                                # Initiate movement
+                                self._log_message(f"DEBUG: Moving {enemy.name} to {move_to}")
+                                if self.initiate_movement(enemy, move_to):
+                                    # Debug movement if it starts
+                                    self._debug_movement_status(enemy)
+                                else:
+                                    self._log_message(f"DEBUG: Failed to initiate movement for {enemy.name}")
+                            else:
+                                self._log_message(f"DEBUG: Zero distance to target?!")
+                        else:
+                            self._log_message(f"DEBUG: {enemy.name} already in range of {target.name}")
                     else:
-                        # Attack if in range and ready
-                        if enemy.can_attack():
-                            attack_success = enemy.attack_target(target)
-                            if attack_success:
-                                # Schedule completion of attack (end of wind-up)
-                                self.event_queue.schedule(
-                                    enemy.attack_phase.wind_up_time,
-                                    5,
-                                    self._process_enemy_attack,
-                                    enemy,
-                                    target
-                                )
+                        # Fallback to basic movement
+                        enemy.move_towards_target(target)
+                else:
+                    # Attack if in range and ready
+                    if enemy.can_attack():
+                        self._log_message(f"{enemy.name} attacking {target.name}")
+                        attack_success = enemy.attack_target(target)
+                        if attack_success:
+                            # Schedule completion of attack (end of wind-up)
+                            self.event_queue.schedule(
+                                enemy.attack_phase.wind_up_time,
+                                5,
+                                self._process_enemy_attack,
+                                enemy,
+                                target
+                            )
         
         # Schedule next AI update
         self.event_queue.schedule(self.ai_update_interval, 10, self._update_enemy_ai)
     
+    def _initialize_combat_positions(self):
+        """Initialize entity positions for spatial combat"""
+        # Position party members on the left side
+        party_center_x = getattr(self, 'screen_width', 800) // 4
+        party_center_y = getattr(self, 'screen_height', 600) // 2
+        
+        # Set initial formation center if formation system exists
+        if hasattr(self, 'formation_system'):
+            self.formation_system.formation_center = pygame.Vector2(party_center_x, party_center_y)
+            
+            # Apply initial formation
+            from combat.formation_system import FormationType
+            self.formation_system.apply_formation(FormationType.TRIANGLE)
+        else:
+            # Fallback if no formation system
+            character_spacing = 150
+            
+            for i, character in enumerate(self.game_state.party):
+                if character and character.is_alive():
+                    # Calculate vertical position
+                    char_y = party_center_y + (i - 1) * character_spacing
+                    
+                    # Register with movement controller
+                    if hasattr(self, 'movement_controller'):
+                        self.movement_controller.register_entity(character, 
+                                                            (party_center_x, char_y))
+        
+        # Position enemies on the right side
+        enemy_center_x = getattr(self, 'screen_width', 800) * 3 // 4
+        enemy_center_y = getattr(self, 'screen_height', 600) // 2
+        enemy_spacing = 120
+        
+        for i, enemy in enumerate(self.game_state.enemies):
+            if enemy.is_alive():
+                # Calculate position based on number of enemies
+                if len(self.game_state.enemies) <= 3:
+                    enemy_y = enemy_center_y + (i - (len(self.game_state.enemies) - 1) / 2) * enemy_spacing
+                    enemy_x = enemy_center_x
+                else:
+                    # Grid layout for more than 3 enemies
+                    col = i % 2
+                    row = i // 2
+                    enemy_x = enemy_center_x + (col - 0.5) * enemy_spacing
+                    enemy_y = enemy_center_y + (row - len(self.game_state.enemies) // 4) * enemy_spacing
+                
+                # Register with movement controller
+                if hasattr(self, 'movement_controller'):
+                    self.movement_controller.register_entity(enemy, (enemy_x, enemy_y))
+
     def initialize_movement_controller(self, screen_width, screen_height):
         """
         Initialize the movement controller for spatial combat
@@ -647,18 +757,57 @@ class RealtimeBattleManager:
             completion_callback (function, optional): Function to call when movement completes
         """
         if not entity.is_alive():
-            self.movement_controller.stop_movement(entity)
+            # Log dead entity
+            self._log_message(f"DEBUG: Entity {entity.name} died during movement")
+            
+            if hasattr(self, 'movement_controller'):
+                self.movement_controller.stop_movement(entity)
             return
         
-        # Check if movement is complete
-        if self.movement_controller.is_entity_at_target(entity):
+        # Log current position and state
+        self._log_message(f"DEBUG: Checking movement completion for {entity.name} in state {entity.combat_state}")
+        
+        # Check if movement controller exists
+        if not hasattr(self, 'movement_controller'):
+            # No movement controller, can't check completion
+            self._log_message(f"DEBUG: No movement controller")
+            return
+        
+        # Check if the entity is still being tracked
+        if entity not in self.movement_controller.moving_entities:
+            # Entity not tracked, reset state
+            self._log_message(f"DEBUG: Entity {entity.name} not in moving_entities")
+            entity.combat_state = CombatState.IDLE
+            entity.state_start_time = time.time()
+            return
+        
+        # Get current position and target
+        current_pos = (entity.position.x, entity.position.y)
+        target_pos = self.movement_controller.moving_entities[entity]['target']
+        
+        # Calculate distance to target
+        import math
+        distance = math.hypot(current_pos[0] - target_pos[0], current_pos[1] - target_pos[1])
+        self._log_message(f"DEBUG: Distance to target: {distance:.2f}")
+        
+        # Check if close enough to target (within half a cell)
+        cell_size = self.movement_controller.combat_grid.cell_size
+        is_close_enough = distance < cell_size / 2
+        
+        # Check if movement is complete using the movement controller
+        is_at_target = self.movement_controller.is_entity_at_target(entity)
+        self._log_message(f"DEBUG: is_entity_at_target: {is_at_target}, is_close_enough: {is_close_enough}")
+        
+        if is_at_target or is_close_enough:
             # Movement complete
+            self._log_message(f"DEBUG: Movement complete for {entity.name}")
             self.movement_controller.stop_movement(entity)
             
             # Update entity state
             old_state = entity.combat_state
             entity.combat_state = CombatState.IDLE
             entity.state_start_time = time.time()
+            entity.is_moving = False
             
             # Trigger movement end event
             trigger_event(EVENT_COMBAT_MOVE_END, entity)
@@ -668,11 +817,17 @@ class RealtimeBattleManager:
             
             # Call completion callback if provided
             if completion_callback:
+                self._log_message(f"DEBUG: Calling completion callback for {entity.name}")
                 completion_callback(entity)
         else:
-            # Movement still in progress, check again later
+            # Not at target yet, check again later
+            self._log_message(f"DEBUG: Movement continuing for {entity.name}")
             self.event_queue.schedule(
-                0.1, 10, self._check_movement_completion, entity, completion_callback
+                0.5, # Check more frequently
+                10, 
+                self._check_movement_completion, 
+                entity, 
+                completion_callback
             )
 
     def _update_spatial_combat_systems(self, delta_time):
@@ -1121,3 +1276,44 @@ class RealtimeBattleManager:
         if hasattr(self.combat_log, 'get_recent_entries'):
             return self.combat_log.get_recent_entries(count)
         return []
+
+    def _debug_movement_status(self, entity):
+        """
+        Debug helper to check why movement isn't completing
+        
+        Args:
+            entity: The entity to check
+        """
+        if not hasattr(self, 'movement_controller'):
+            self._log_message("DEBUG: No movement controller!")
+            return
+        
+        if not entity.is_alive():
+            self._log_message(f"DEBUG: {entity.name} is not alive!")
+            return
+            
+        if entity.combat_state != CombatState.MOVING:
+            self._log_message(f"DEBUG: {entity.name} is not in MOVING state, current state: {entity.combat_state}")
+            return
+            
+        # Check if entity is being tracked in movement controller
+        if entity not in self.movement_controller.moving_entities:
+            self._log_message(f"DEBUG: {entity.name} is not tracked in moving_entities!")
+            return
+            
+        # Get current position and target
+        current_pos = (entity.position.x, entity.position.y)
+        target_pos = self.movement_controller.moving_entities[entity]['target']
+        
+        # Calculate distance to target
+        import math
+        distance = math.hypot(current_pos[0] - target_pos[0], current_pos[1] - target_pos[1])
+        
+        self._log_message(f"DEBUG: {entity.name} is at {current_pos}, target is {target_pos}, distance: {distance:.2f}")
+        
+        # Check if at target according to movement controller logic
+        at_target = self.movement_controller.is_entity_at_target(entity)
+        self._log_message(f"DEBUG: is_entity_at_target reports: {at_target}")
+        
+        # Schedule another check
+        self.event_queue.schedule(1.0, 99, self._debug_movement_status, entity)

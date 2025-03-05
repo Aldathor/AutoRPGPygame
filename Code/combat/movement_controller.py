@@ -260,29 +260,38 @@ class MovementController:
             # Store for visualization
             movement_data['next_position'] = next_position
             
+            # CRITICAL: Directly update entity position without using grid
+            # This ensures the visual position changes even if grid movement fails
+            import math
+            dx = next_position[0] - current_position[0]
+            dy = next_position[1] - current_position[1]
+            dist = math.hypot(dx, dy)
+            
+            if dist > 0:
+                # Only move if there's a distance to travel
+                move_ratio = min(1.0, move_distance / dist)
+                new_x = current_position[0] + dx * move_ratio
+                new_y = current_position[1] + dy * move_ratio
+                
+                # Update entity position directly
+                entity.position.x = new_x
+                entity.position.y = new_y
+                
+                # Log the movement (for debugging)
+                import pygame
+                if pygame.time.get_ticks() % 30 == 0:  # Only log occasionally to avoid spam
+                    print(f"Moving {entity.name} from {current_position} to ({new_x}, {new_y})")
+            
             # Check if we've reached the end of the path
-            if next_position == path[-1]:
-                # Try to move to the final position
-                if self.combat_grid.move_entity(entity, next_position):
-                    # Reached the target
-                    entities_to_remove.append(entity)
-                    entity.is_moving = False
-                    entity.target_position = None
-                else:
-                    # Final position is blocked, stop here
-                    entities_to_remove.append(entity)
-                    entity.is_moving = False
-            else:
-                # Move along the path
-                if not self.combat_grid.move_entity(entity, next_position):
-                    # Path is blocked, need to recalculate
-                    new_path = self.pathfinder.find_path(current_position, movement_data['target'])
-                    if new_path:
-                        movement_data['path'] = new_path
-                    else:
-                        # Can't find a new path, stop movement
-                        entities_to_remove.append(entity)
-                        entity.is_moving = False
+            end_dist = math.hypot(entity.position.x - path[-1][0], entity.position.y - path[-1][1])
+            if end_dist < self.cell_size / 2:
+                # Reached the target
+                entities_to_remove.append(entity)
+                entity.is_moving = False
+                entity.target_position = None
+                
+                # Also update grid position
+                self.combat_grid.move_entity(entity, (entity.position.x, entity.position.y))
         
         # Remove entities that have finished moving
         for entity in entities_to_remove:

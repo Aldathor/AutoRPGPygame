@@ -227,79 +227,62 @@ class BaseCharacter(ABC):
         
         return True
 
-    def update(self, delta_time):
-        """
-        Update character state for real-time combat
-        
-        Args:
-            delta_time (float): Time since last update in seconds
-        """
-        # Update cooldowns
-        if self.attack_cooldown > 0:
-            self.attack_cooldown = max(0, self.attack_cooldown - delta_time)
-        
-        # Check elapsed time since state change
-        current_time = time.time()
-        state_elapsed_time = current_time - self.state_start_time
-        
-        # Handle state transitions based on timing
-        if self.combat_state == CombatState.WIND_UP:
-            if state_elapsed_time >= self.attack_phase.wind_up_time:
-                # Transition to attack phase
-                self.combat_state = CombatState.ATTACK
-                self.state_start_time = current_time
-                
-                # If we have a current target, complete the attack
-                if self.current_target and self.current_target.is_alive():
-                    self.complete_attack(self.current_target)
-                else:
-                    # No valid target, go straight to recovery
-                    self.combat_state = CombatState.RECOVERY
-                    self.state_start_time = current_time
-        
-        elif self.combat_state == CombatState.ATTACK:
-            if state_elapsed_time >= self.attack_phase.attack_time:
-                # Transition to recovery phase
+def update(self, delta_time):
+    """
+    Update character state for real-time combat
+    
+    Args:
+        delta_time (float): Time since last update in seconds
+    """
+    # Update cooldowns
+    if self.attack_cooldown > 0:
+        self.attack_cooldown = max(0, self.attack_cooldown - delta_time)
+    
+    # Check elapsed time since state change
+    current_time = time.time()
+    state_elapsed_time = current_time - self.state_start_time
+    
+    # Handle state transitions based on timing
+    if self.combat_state == CombatState.WIND_UP:
+        if state_elapsed_time >= self.attack_phase.wind_up_time:
+            # Transition to attack phase
+            self.combat_state = CombatState.ATTACK
+            self.state_start_time = current_time
+            
+            # If we have a current target, complete the attack
+            if self.current_target and self.current_target.is_alive():
+                self.complete_attack(self.current_target)
+            else:
+                # No valid target, go straight to recovery
                 self.combat_state = CombatState.RECOVERY
                 self.state_start_time = current_time
-        
-        elif self.combat_state == CombatState.RECOVERY:
-            if state_elapsed_time >= self.attack_phase.recovery_time:
-                # Return to idle state
-                self.combat_state = CombatState.IDLE
-                self.current_target = None
-        
-        elif self.combat_state == CombatState.STAGGERED:
-            # Staggered state lasts a fixed time (0.5 seconds)
-            if state_elapsed_time >= 0.5:
-                self.combat_state = CombatState.IDLE
-        
-        elif self.combat_state == CombatState.KNOCKED_BACK:
-            # Knocked back state lasts a fixed time (0.5 seconds)
-            if state_elapsed_time >= 0.5:
-                self.combat_state = CombatState.IDLE
-        
-        elif self.combat_state == CombatState.STUNNED:
-            # Stunned state lasts a fixed time (2.0 seconds)
-            if state_elapsed_time >= 2.0:
-                self.combat_state = CombatState.IDLE
-        
-        # Handle movement if we have a target position and we're moving
-        if self.is_moving and self.target_position:
-            direction = self.target_position - self.position
-            distance = direction.length()
-            
-            # If we're close enough, stop moving
-            if distance < 5:
-                self.is_moving = False
-                self.target_position = None
-            else:
-                # Normalize direction and apply movement
-                if distance > 0:
-                    direction.normalize_ip()
-                    move_distance = self.movement_speed * delta_time
-                    move_distance = min(move_distance, distance)  # Don't overshoot
-                    self.position += direction * move_distance
+    
+    elif self.combat_state == CombatState.ATTACK:
+        if state_elapsed_time >= self.attack_phase.attack_time:
+            # Transition to recovery phase
+            self.combat_state = CombatState.RECOVERY
+            self.state_start_time = current_time
+    
+    elif self.combat_state == CombatState.RECOVERY:
+        if state_elapsed_time >= self.attack_phase.recovery_time:
+            # Return to idle state
+            self.combat_state = CombatState.IDLE
+            self.current_target = None
+    
+    elif self.combat_state == CombatState.STAGGERED:
+        # Staggered state lasts a fixed time (0.5 seconds)
+        if state_elapsed_time >= 0.5:
+            self.combat_state = CombatState.IDLE
+    
+    elif self.combat_state == CombatState.KNOCKED_BACK:
+        # Knocked back state lasts a fixed time (0.5 seconds)
+        if state_elapsed_time >= 0.5:
+            self.combat_state = CombatState.IDLE
+    
+    elif self.combat_state == CombatState.STUNNED:
+        # Stunned state lasts a fixed time (2.0 seconds)
+        if state_elapsed_time >= 2.0:
+            self.combat_state = CombatState.IDLE
     
     def complete_attack(self, target):
         """
